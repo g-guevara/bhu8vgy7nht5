@@ -218,5 +218,10 @@ export const styles = StyleSheet.create({
   clearButtonText: {
     color: '#666',
     fontSize: 14,
-  }
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+    backgroundColor: '#F0F0F0',
+    borderColor: '#E0E0E0',
+  },
 });

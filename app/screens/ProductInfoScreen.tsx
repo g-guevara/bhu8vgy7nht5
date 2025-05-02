@@ -131,7 +131,7 @@ export default function ProductInfoScreen() {
           />
           
           {/* Component 5: Product Actions (Wishlist and Test buttons) */}
-          <ProductActions />
+          <ProductActions product={product} />
         </View>
       </ScrollView>
     </SafeAreaView>

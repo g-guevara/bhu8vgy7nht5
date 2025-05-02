@@ -74,4 +74,57 @@ export const styles = StyleSheet.create({
     color: '#c7c7cc',
     marginRight: 8,
   },
+  // Add these styles to your existing styles in app/styles/WishlistStyles.ts
+
+loadingContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+errorContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+errorText: {
+  fontSize: 16,
+  color: '#666',
+  textAlign: 'center',
+  marginBottom: 15,
+},
+retryButton: {
+  backgroundColor: '#007AFF',
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+  borderRadius: 5,
+},
+retryButtonText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '500',
+},
+emptyContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+emptyText: {
+  fontSize: 18,
+  color: '#666',
+  textAlign: 'center',
+  marginBottom: 10,
+},
+emptySubtext: {
+  fontSize: 14,
+  color: '#999',
+  textAlign: 'center',
+},
+clearSearchText: {
+  color: '#007AFF',
+  fontSize: 16,
+  marginTop: 10,
+}
 });
