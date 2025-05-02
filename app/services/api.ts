@@ -20,13 +20,13 @@ export class ApiService {
       const response = await fetch(`${API_URL}${endpoint}`, config);
       
       if (response.status === 401) {
-        // Token expired or invalid
-        throw new Error('Session expired');
+        // Token expirado o inválido
+        throw new Error('Sesión expirada');
       }
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error in the request');
+        throw new Error(error.error || 'Error en la petición');
       }
       
       return response.json();
@@ -84,12 +84,6 @@ export class ApiService {
     return this.fetch('/wishlist', {
       method: 'POST',
       body: JSON.stringify({ productID }),
-    });
-  }
-
-  static async removeFromWishlist(wishlistItemId: string) {
-    return this.fetch(`/wishlist/${wishlistItemId}`, {
-      method: 'DELETE',
     });
   }
 

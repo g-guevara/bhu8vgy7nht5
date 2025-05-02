@@ -443,32 +443,7 @@ app.get("/profile", authenticateToken, async (req, res) => {
   }
 });
 
-// DELETE wishlist item endpoint
-app.delete("/wishlist/:id", authenticateToken, async (req, res) => {
-  try {
-    const wishlistItemId = req.params.id;
-    
-    // Find the wishlist item
-    const wishlistItem = await Wishlist.findOne({ 
-      _id: wishlistItemId,
-      userID: req.user.userID // Ensure the item belongs to the authenticated user
-    });
-    
-    if (!wishlistItem) {
-      return res.status(404).json({ error: "Wishlist item not found" });
-    }
-    
-    // Delete the item
-    await Wishlist.deleteOne({ _id: wishlistItemId });
-    
-    res.json({ 
-      message: "Item removed from wishlist successfully",
-      id: wishlistItemId
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 
 

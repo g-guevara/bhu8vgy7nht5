@@ -13,7 +13,6 @@ interface ProductActionsProps {
 const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
   const [loading, setLoading] = useState(false);
   const [isInWishlist, setIsInWishlist] = useState(false);
-  const [wishlistItemId, setWishlistItemId] = useState<string | null>(null);
   const { showToast } = useToast();
 
   // Check if product is already in wishlist on component mount
@@ -24,14 +23,8 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
       try {
         setLoading(true);
         const wishlist = await ApiService.getWishlist();
-        const wishlistItem = wishlist.find((item: any) => item.productID === product.code);
-        if (wishlistItem) {
-          setIsInWishlist(true);
-          setWishlistItemId(wishlistItem._id);
-        } else {
-          setIsInWishlist(false);
-          setWishlistItemId(null);
-        }
+        const inWishlist = wishlist.some((item: any) => item.productID === product.code);
+        setIsInWishlist(inWishlist);
       } catch (error: any) {
         console.error('Error checking wishlist status:', error);
       } finally {
@@ -53,38 +46,9 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
       await ApiService.addToWishlist(product.code);
       setIsInWishlist(true);
       showToast('Product added to wishlist', 'success');
-      
-      // Refresh wishlist status to get the new item ID
-      const wishlist = await ApiService.getWishlist();
-      const wishlistItem = wishlist.find((item: any) => item.productID === product.code);
-      if (wishlistItem) {
-        setWishlistItemId(wishlistItem._id);
-      }
     } catch (error: any) {
       console.error('Error adding to wishlist:', error);
       showToast(error.message || 'Failed to add to wishlist', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoveFromWishlist = async () => {
-    if (!wishlistItemId) {
-      showToast('Wishlist item ID is missing', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Since the API doesn't have a removeFromWishlist method yet,
-      // we need to implement it in the ApiService class
-      await ApiService.removeFromWishlist(wishlistItemId);
-      setIsInWishlist(false);
-      setWishlistItemId(null);
-      showToast('Product removed from wishlist', 'success');
-    } catch (error: any) {
-      console.error('Error removing from wishlist:', error);
-      showToast(error.message || 'Failed to remove from wishlist', 'error');
     } finally {
       setLoading(false);
     }
@@ -96,19 +60,16 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
         style={[
           styles.secondaryButton, 
           loading && styles.buttonDisabled,
-          isInWishlist && styles.removeButton
+          isInWishlist && styles.buttonDisabled
         ]} 
-        onPress={isInWishlist ? handleRemoveFromWishlist : handleAddToWishlist}
-        disabled={loading}
+        onPress={handleAddToWishlist}
+        disabled={loading || isInWishlist}
       >
         {loading ? (
           <ActivityIndicator size="small" color="#007AFF" />
         ) : (
-          <Text style={[
-            styles.secondaryButtonText,
-            isInWishlist && styles.removeButtonText
-          ]}>
-            {isInWishlist ? 'Remove from Wishlist' : 'Add to Wishlist'}
+          <Text style={styles.secondaryButtonText}>
+            {isInWishlist ? 'Added to Wishlist' : 'Add to Wishlist'}
           </Text>
         )}
       </TouchableOpacity>
