@@ -224,4 +224,11 @@ export const styles = StyleSheet.create({
     backgroundColor: '#F0F0F0',
     borderColor: '#E0E0E0',
   },
+  removeButton: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#FF5252',
+  },
+  removeButtonText: {
+    color: '#D32F2F',
+  },
 });
