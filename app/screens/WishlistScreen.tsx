@@ -25,65 +25,37 @@ interface WishlistItem {
   addedAt: string;
 }
 
-interface WishlistProductItem {
-  id: string;
-  name: string;
-  category: string;
-  image: string;
-  backgroundColor: string;
-  productID: string;
+interface Product {
+  code: string;
+  product_name: string;
+  brands: string;
+  image_url: string;
+  ingredients_text: string;
 }
-
-// Color mapping for different categories
-const categoryColors: Record<string, string> = {
-  'Seafood': '#e1f0ff',
-  'Fruits': '#fff7e6',
-  'Vegetables': '#e6f7f0',
-  'Dairy': '#f0e6ff',
-  'Grains': '#ffe6e6',
-  'Nuts': '#e6ffe6',
-  'Legumes': '#fff0e6',
-  'Meat': '#ffefe6',
-  'Default': '#f2f2f2'
-};
-
-// Emoji mapping for different categories
-const categoryEmojis: Record<string, string> = {
-  'Seafood': '🐟',
-  'Fruits': '🍎',
-  'Vegetables': '🥦',
-  'Dairy': '🥛',
-  'Grains': '🌾',
-  'Nuts': '🥜',
-  'Legumes': '🌱',
-  'Meat': '🥩',
-  'Default': '🍽️'
-};
 
 export default function WishlistScreen() {
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [wishlistData, setWishlistData] = useState<WishlistProductItem[]>([]);
-  const [filteredData, setFilteredData] = useState<WishlistProductItem[]>([]);
+  const [wishlistProducts, setWishlistProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const { showToast } = useToast();
   const router = useRouter();
 
-  // Helper function to determine the category
-  const getCategoryFromProduct = (product: any): string => {
+  // Get default emoji for product without image
+  const getDefaultEmoji = (product: Product): string => {
     const name = (product.product_name || '').toLowerCase();
     const ingredients = (product.ingredients_text || '').toLowerCase();
 
-    if (name.includes('fish') || name.includes('tuna') || ingredients.includes('fish')) return 'Seafood';
-    if (name.includes('apple') || name.includes('banana') || name.includes('fruit')) return 'Fruits';
-    if (name.includes('carrot') || name.includes('vegetable')) return 'Vegetables';
-    if (name.includes('milk') || name.includes('cheese') || name.includes('yogurt')) return 'Dairy';
-    if (name.includes('wheat') || name.includes('rice') || name.includes('cereal')) return 'Grains';
-    if (name.includes('peanut') || name.includes('almond')) return 'Nuts';
-    if (name.includes('bean') || name.includes('lentil')) return 'Legumes';
-    if (name.includes('beef') || name.includes('chicken') || name.includes('pork')) return 'Meat';
-    
-    return 'Default';
+    if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
+    if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
+    if (name.includes('milk') || name.includes('dairy')) return '🥛';
+    if (name.includes('fruit') || name.includes('apple') || name.includes('banana')) return '🍎';
+    if (name.includes('vegetable') || name.includes('carrot')) return '🥦';
+    if (name.includes('fish') || name.includes('tuna')) return '🐟';
+    if (name.includes('meat') || name.includes('beef')) return '🥩';
+
+    return '🍽️';
   };
 
   // Fetch wishlist data
@@ -96,37 +68,17 @@ export default function WishlistScreen() {
         // Get wishlist items from API
         const wishlistItems = await ApiService.getWishlist();
         
-        // Convert wishlist items to displayable format
-        const productsMap = new Map();
+        // Map product IDs from wishlist
+        const productIDs = wishlistItems.map((item: WishlistItem) => item.productID);
         
-        // Use sample products as a fallback - in a real app, you'd fetch product details
-        // from your API based on the productIDs in the wishlist
-        sampleProducts.forEach(product => {
-          productsMap.set(product.code, product);
-        });
+        // Find corresponding products from sample data
+        // In a real app, you might fetch these from your backend
+        const products = sampleProducts.filter(product => 
+          productIDs.includes(product.code)
+        );
         
-        const enrichedItems: WishlistProductItem[] = wishlistItems.map((item: WishlistItem) => {
-          // Try to find product details from our sample data
-          // In a production app, you might need to fetch these details from an API
-          const productDetails = productsMap.get(item.productID) || {
-            product_name: 'Unknown Product',
-            code: item.productID
-          };
-          
-          const category = getCategoryFromProduct(productDetails);
-          
-          return {
-            id: item._id,
-            name: productDetails.product_name || 'Unknown Product',
-            category: category,
-            image: categoryEmojis[category] || '🍽️',
-            backgroundColor: categoryColors[category] || '#f2f2f2',
-            productID: item.productID
-          };
-        });
-        
-        setWishlistData(enrichedItems);
-        setFilteredData(enrichedItems);
+        setWishlistProducts(products);
+        setFilteredProducts(products);
       } catch (error: any) {
         console.error('Error fetching wishlist:', error);
         setError(error.message || 'Failed to load wishlist');
@@ -142,49 +94,51 @@ export default function WishlistScreen() {
   const handleSearch = (text: string) => {
     setSearchText(text);
     if (text) {
-      const filtered = wishlistData.filter(item => 
-        item.name.toLowerCase().includes(text.toLowerCase()) ||
-        item.category.toLowerCase().includes(text.toLowerCase())
+      const filtered = wishlistProducts.filter(product => 
+        product.product_name.toLowerCase().includes(text.toLowerCase()) ||
+        product.brands.toLowerCase().includes(text.toLowerCase())
       );
-      setFilteredData(filtered);
+      setFilteredProducts(filtered);
     } else {
-      setFilteredData(wishlistData);
+      setFilteredProducts(wishlistProducts);
     }
   };
 
-  const handleItemPress = async (item: WishlistProductItem) => {
+  const handleProductPress = async (product: Product) => {
     try {
-      // Find the full product in sample data
-      const product = sampleProducts.find(p => p.code === item.productID);
+      // Store the selected product in AsyncStorage
+      await AsyncStorage.setItem('selectedProduct', JSON.stringify(product));
       
-      if (product) {
-        // Store the selected product in AsyncStorage
-        await AsyncStorage.setItem('selectedProduct', JSON.stringify(product));
-        
-        // Navigate to product detail screen
-        router.push('/screens/ProductInfoScreen');
-      } else {
-        showToast('Product details not found', 'error');
-      }
+      // Navigate to product detail screen
+      router.push('/screens/ProductInfoScreen');
     } catch (error) {
       console.error('Error navigating to product:', error);
       showToast('Error opening product details', 'error');
     }
   };
 
-  const renderItem = ({ item }: { item: WishlistProductItem }) => (
-    <TouchableOpacity 
-      style={styles.itemContainer}
-      onPress={() => handleItemPress(item)}
+  const renderProduct = ({ item }: { item: Product }) => (
+    <TouchableOpacity
+      key={item.code}
+      style={styles.productItem}
+      onPress={() => handleProductPress(item)}
     >
-      <View style={[styles.imageContainer, { backgroundColor: item.backgroundColor }]}>
-        <Text style={styles.itemEmoji}>{item.image}</Text>
+      <View style={styles.productImageContainer}>
+        {item.image_url ? (
+          <Image
+            source={{ uri: item.image_url }}
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={styles.productEmoji}>{getDefaultEmoji(item)}</Text>
+        )}
       </View>
-      <View style={styles.textContainer}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemCategory}>{item.category}</Text>
+      <View style={styles.productInfo}>
+        <Text style={styles.productName}>{item.product_name}</Text>
+        <Text style={styles.productBrand}>{item.brands}</Text>
       </View>
-      <Text style={styles.arrow}>›</Text>
+      <Text style={styles.arrowIcon}>›</Text>
     </TouchableOpacity>
   );
 
@@ -193,16 +147,20 @@ export default function WishlistScreen() {
       <Text style={styles.headerText}>Wishlist</Text>
       
       <View style={styles.searchContainer}>
-        <View style={styles.searchIcon}>
-          <Text style={styles.searchIconText}>🔍</Text>
-        </View>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search..."
-          placeholderTextColor="#999"
+          placeholder="Search"
           value={searchText}
           onChangeText={handleSearch}
         />
+        {searchText ? (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => handleSearch('')}
+          >
+            <Text style={styles.clearButtonText}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {loading ? (
@@ -219,7 +177,7 @@ export default function WishlistScreen() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : filteredData.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
             {searchText ? 'No products found matching your search' : 'Your wishlist is empty'}
@@ -236,9 +194,9 @@ export default function WishlistScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredData}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
+          data={filteredProducts}
+          renderItem={renderProduct}
+          keyExtractor={item => item.code}
           contentContainerStyle={styles.listContainer}
         />
       )}

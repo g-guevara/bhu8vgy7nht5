@@ -36,8 +36,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     const name = product.product_name.toLowerCase();
     const ingredients = product.ingredients_text.toLowerCase();
 
-    if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
-    if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
+    if (name.includes('Null') || ingredients.includes('hafer')) return '';
 
     return '🍽️';
   };
