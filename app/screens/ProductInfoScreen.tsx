@@ -1,21 +1,25 @@
 // app/screens/ProductInfoScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { 
-  View, 
-  Text, 
-  Image, 
-  StyleSheet, 
   SafeAreaView, 
   ScrollView, 
+  View, 
+  ActivityIndicator,
   TouchableOpacity,
-  TextInput,
-  ActivityIndicator
+  Text
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Product } from '../data/productData';
 import { styles } from '../styles/ProductInfoStyles';
+
+// Import components
+import ProductHeader from '../components/ProductInfo/ProductHeader';
+import ProductDetails from '../components/ProductInfo/ProductDetails';
+import ProductReactions from '../components/ProductInfo/ProductReactions';
+import ProductNotes from '../components/ProductInfo/ProductNotes';
+import ProductActions from '../components/ProductInfo/ProductActions';
 
 export default function ProductInfoScreen() {
   const router = useRouter();
@@ -43,41 +47,11 @@ export default function ProductInfoScreen() {
     loadProduct();
   }, []);
 
-  // Check if it's an organic product
-  const isOrganic = product?.code.startsWith('SSS');
-
-  const getDefaultEmoji = (): string => {
-    if (!product) return '🍽️';
-    
-    const name = product.product_name.toLowerCase();
-    const ingredients = product.ingredients_text.toLowerCase();
-
-    if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
-    if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
-
-    return '🍽️';
-  };
-
   const handleBack = () => {
     // Clean up AsyncStorage and go back
     AsyncStorage.removeItem('selectedProduct').then(() => {
       router.back();
     });
-  };
-
-  const handleReactionSelect = (reaction: 'Critic' | 'Sensitive' | 'Safe') => {
-    setSelectedReaction(reaction);
-  };
-
-  const handleSaveNotes = async () => {
-    // In a real app, you would save the notes and selected reaction to your backend
-    console.log('Product code:', product?.code);
-    console.log('Saving reaction:', selectedReaction);
-    console.log('Saving notes:', notes);
-
-    // Clean up AsyncStorage and go back
-    await AsyncStorage.removeItem('selectedProduct');
-    router.back();
   };
 
   // Show loading indicator while fetching the product
@@ -131,127 +105,33 @@ export default function ProductInfoScreen() {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Product Image */}
-        <View style={styles.imageContainer}>
-          {product.image_url ? (
-            <Image
-              source={{ uri: product.image_url }}
-              style={styles.productImage}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={styles.placeholderContainer}>
-              <Text style={styles.placeholderEmoji}>{getDefaultEmoji()}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Product Info */}
         <View style={styles.productInfoContainer}>
-          <View style={styles.productNameContainer}>
-            <Text style={styles.productName}>
-              {product.product_name}
-            </Text>
-            {isOrganic ? (
-              <Text style={styles.organicLabel}>organic</Text>
-            ) : (
-              <Text style={styles.organicLabel}>product</Text>
-            )}
-
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Brand:</Text>
-            <Text style={styles.infoValue}>{product.brands}</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Ingredients:</Text>
-            <Text style={styles.infoValue}>{product.ingredients_text}</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Select Reaction Section */}
-         {/* Select Reaction Section */}
-<View style={styles.sectionHeaderRow}>
-  <Text style={styles.sectionTitle}>Select Reaction</Text>
-  <TouchableOpacity 
-    style={styles.clearButton}
-    onPress={() => setSelectedReaction(null)}
-  >
-    <Text style={styles.clearButtonText}>Clear</Text>
-  </TouchableOpacity>
-</View>
+          {/* Component 1: Product Header (Image and Name) */}
+          <ProductHeader product={product} />
           
-          <View style={styles.reactionsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.reactionButton,
-                selectedReaction === 'Critic' && styles.selectedReactionButton
-              ]}
-              onPress={() => handleReactionSelect('Critic')}
-            >
-              <View style={styles.reactionIcon}>
-                <View style={[styles.reactionDot, styles.criticDot]} />
-              </View>
-              <Text style={styles.reactionText}>Critic</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.reactionButton,
-                selectedReaction === 'Sensitive' && styles.selectedReactionButton
-              ]}
-              onPress={() => handleReactionSelect('Sensitive')}
-            >
-              <View style={styles.reactionIcon}>
-                <View style={[styles.reactionDot, styles.sensitiveDot]} />
-              </View>
-              <Text style={styles.reactionText}>Sensitive</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.reactionButton,
-                selectedReaction === 'Safe' && styles.selectedReactionButton
-              ]}
-              onPress={() => handleReactionSelect('Safe')}
-            >
-              <View style={styles.reactionIcon}>
-                <View style={[styles.reactionDot, styles.safeDot]} />
-              </View>
-              <Text style={styles.reactionText}>Safe</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.divider} />
-
-          {/* Notes Section */}
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <TextInput
-            style={styles.notesInput}
-            multiline
-            placeholder="Notes"
-            value={notes}
-            onChangeText={setNotes}
+          
+          {/* Component 2: Product Details (Brand and Ingredients) */}
+          <ProductDetails product={product} />
+          
+          <View style={styles.divider} />
+          
+          {/* Component 3: Product Reactions */}
+          <ProductReactions 
+            selectedReaction={selectedReaction} 
+            setSelectedReaction={setSelectedReaction} 
           />
-
-          {/* Save Button */}
-
-          <View style={styles.buttonsRow}>
-            <TouchableOpacity style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Add to Wishlist</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Start Test</Text>
-            </TouchableOpacity>
-          </View>
+          
+          <View style={styles.divider} />
+          
+          {/* Component 4: Product Notes */}
+          <ProductNotes 
+            notes={notes} 
+            setNotes={setNotes} 
+          />
+          
+          {/* Component 5: Product Actions (Wishlist and Test buttons) */}
+          <ProductActions />
         </View>
       </ScrollView>
     </SafeAreaView>
