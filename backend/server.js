@@ -79,6 +79,15 @@ const WishlistSchema = new mongoose.Schema({
   addedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+const TestSchema = new mongoose.Schema({
+  userID: { type: String, required: true },
+  itemID: { type: String, required: true },
+  startDate: { type: Date, default: Date.now },
+  finishDate: { type: Date, required: true },
+  completed: { type: Boolean, default: false },
+  result: { type: String, enum: ['Critic', 'Sensitive', 'Safe', null], default: null }
+}, { timestamps: true });
+
 // Modelos
 const User = mongoose.model("User", UserSchema, "user");
 const Article = mongoose.model("Article", ArticleSchema, "articles");
@@ -86,6 +95,9 @@ const History = mongoose.model("History", HistorySchema, "history");
 const ProductIngredient = mongoose.model("ProductIngredient", ProductIngredientSchema, "productingredients");
 const ProductNote = mongoose.model("ProductNote", ProductNoteSchema, "productnotes");
 const Wishlist = mongoose.model("Wishlist", WishlistSchema, "wishlist");
+const Test = mongoose.model("Test", TestSchema, "tests");
+
+
 
 // MIDDLEWARE DE AUTENTICACIÓN JWT
 const authenticateToken = (req, res, next) => {
@@ -468,6 +480,84 @@ app.delete("/wishlist/:id", authenticateToken, async (req, res) => {
   }
 });
 
+
+
+// Get user's active tests
+app.get("/tests", authenticateToken, async (req, res) => {
+  try {
+    const tests = await Test.find({ userID: req.user.userID });
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Start a new test
+app.post("/tests", authenticateToken, async (req, res) => {
+  try {
+    const { itemID } = req.body;
+    
+    if (!itemID) {
+      return res.status(400).json({ error: "Product ID is required" });
+    }
+    
+    // Check if there's already an active test for this product
+    const existingTest = await Test.findOne({ 
+      userID: req.user.userID,
+      itemID,
+      completed: false
+    });
+    
+    if (existingTest) {
+      return res.status(400).json({ error: "Test already in progress for this product" });
+    }
+    
+    // Create a new test with 3-day duration
+    const startDate = new Date();
+    const finishDate = new Date(startDate);
+    finishDate.setDate(finishDate.getDate() + 3); // 3-day test
+    
+    const test = new Test({
+      userID: req.user.userID,
+      itemID,
+      startDate,
+      finishDate,
+      completed: false
+    });
+    
+    await test.save();
+    res.status(201).json(test);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Complete a test
+app.put("/tests/:id", authenticateToken, async (req, res) => {
+  try {
+    const testId = req.params.id;
+    const { result } = req.body;
+    
+    const test = await Test.findOne({ 
+      _id: testId,
+      userID: req.user.userID
+    });
+    
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+    
+    test.completed = true;
+    if (result) {
+      test.result = result;
+    }
+    
+    await test.save();
+    res.json(test);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 
 

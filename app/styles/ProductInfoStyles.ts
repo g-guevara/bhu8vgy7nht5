@@ -231,4 +231,8 @@ export const styles = StyleSheet.create({
   removeButtonText: {
     color: '#D32F2F',
   },
+  activeTestButton: {
+    backgroundColor: '#E6F7FF',
+    borderColor: '#1890FF',
+  },
 });

@@ -125,4 +125,30 @@ export class ApiService {
       body: JSON.stringify({ trialDays }),
     });
   }
+
+static async startTest(productID: string) {
+  return this.fetch('/tests', {
+    method: 'POST',
+    body: JSON.stringify({ itemID: productID }),
+  });
+}
+
+static async getTests() {
+  return this.fetch('/tests');
+}
+
+static async completeTest(testId: string, result: 'Critic' | 'Sensitive' | 'Safe' | null) {
+  return this.fetch(`/tests/${testId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ result }),
+  });
+}
+
+
+
+
+
+
+
+
 }

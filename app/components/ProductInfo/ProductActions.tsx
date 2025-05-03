@@ -1,6 +1,7 @@
 // app/components/ProductInfo/ProductActions.tsx
 import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { styles } from '../../styles/ProductInfoStyles';
 import { Product } from '../../data/productData';
 import { ApiService } from '../../services/api';
@@ -11,18 +12,23 @@ interface ProductActionsProps {
 }
 
 const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
   const [isInWishlist, setIsInWishlist] = useState(false);
+  const [activeTest, setActiveTest] = useState<any>(null);
   const [wishlistItemId, setWishlistItemId] = useState<string | null>(null);
   const { showToast } = useToast();
 
-  // Check if product is already in wishlist on component mount
+  // Check if product is already in wishlist and if there's an active test on component mount
   useEffect(() => {
-    const checkWishlistStatus = async () => {
+    const checkStatus = async () => {
       if (!product.code) return;
       
       try {
         setLoading(true);
+        
+        // Check wishlist status
         const wishlist = await ApiService.getWishlist();
         const wishlistItem = wishlist.find((item: any) => item.productID === product.code);
         if (wishlistItem) {
@@ -32,14 +38,24 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
           setIsInWishlist(false);
           setWishlistItemId(null);
         }
+        
+        // Check if there's an active test for this product
+        const tests = await ApiService.getTests();
+        const currentTest = tests.find((test: any) => 
+          test.itemID === product.code && !test.completed
+        );
+        
+        if (currentTest) {
+          setActiveTest(currentTest);
+        }
       } catch (error: any) {
-        console.error('Error checking wishlist status:', error);
+        console.error('Error checking status:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    checkWishlistStatus();
+    checkStatus();
   }, [product.code]);
 
   const handleAddToWishlist = async () => {
@@ -76,8 +92,6 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
 
     setLoading(true);
     try {
-      // Since the API doesn't have a removeFromWishlist method yet,
-      // we need to implement it in the ApiService class
       await ApiService.removeFromWishlist(wishlistItemId);
       setIsInWishlist(false);
       setWishlistItemId(null);
@@ -88,6 +102,48 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartTest = async () => {
+    if (!product.code) {
+      showToast('Product code is missing', 'error');
+      return;
+    }
+
+    setTestLoading(true);
+    try {
+      const test = await ApiService.startTest(product.code);
+      setActiveTest(test);
+      showToast('Test started successfully! It will last for 3 days', 'success');
+      
+      // Navigate to the Test screen
+      router.push('/screens/TestScreen');
+    } catch (error: any) {
+      console.error('Error starting test:', error);
+      
+      if (error.message?.includes('Test already in progress')) {
+        showToast('There is already an active test for this product', 'warning');
+      } else {
+        showToast(error.message || 'Failed to start test', 'error');
+      }
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const formatRemainingTime = (test: any) => {
+    if (!test) return '';
+    
+    const now = new Date();
+    const finishDate = new Date(test.finishDate);
+    const diffTime = finishDate.getTime() - now.getTime();
+    
+    if (diffTime <= 0) return 'Test completed';
+    
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    return `${diffDays} days, ${diffHours} hours remaining`;
   };
 
   return (
@@ -113,8 +169,24 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
         )}
       </TouchableOpacity>
       
-      <TouchableOpacity style={styles.secondaryButton}>
-        <Text style={styles.secondaryButtonText}>Start Test</Text>
+      <TouchableOpacity 
+        style={[
+          styles.secondaryButton,
+          testLoading && styles.buttonDisabled,
+          activeTest && styles.activeTestButton
+        ]}
+        onPress={handleStartTest}
+        disabled={testLoading || !!activeTest}
+      >
+        {testLoading ? (
+          <ActivityIndicator size="small" color="#007AFF" />
+        ) : activeTest ? (
+          <Text style={styles.secondaryButtonText}>
+            {formatRemainingTime(activeTest)}
+          </Text>
+        ) : (
+          <Text style={styles.secondaryButtonText}>Start Test</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
