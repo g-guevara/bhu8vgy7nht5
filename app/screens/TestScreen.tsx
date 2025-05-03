@@ -12,6 +12,7 @@ import {
 import { styles } from '../styles/TestStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
+import { sampleProducts } from '../data/productData';
 
 interface DayItem {
   day: string;
@@ -121,9 +122,15 @@ export default function TestScreen() {
   };
 
   const getProductName = (productId: string) => {
-    // This is a placeholder. In a real app, you would fetch the product name from your data
-    // For now, we'll just return a formatted version of the ID
-    return `Product ${productId.substring(0, 4)}...`;
+    // Look up the product name from the sampleProducts array
+    const product = sampleProducts.find(p => p.code === productId);
+    
+    if (product) {
+      return product.product_name;
+    }
+    
+    // Fallback if product not found
+    return `Product ${productId.substring(0, 8)}...`;
   };
 
   return (
