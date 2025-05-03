@@ -41,8 +41,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           
         // Find corresponding products from sample data
         const historyProducts = recentHistoryItems
-          .map((item: any) => {
-            const itemId = item.details?.itemID;
+          .map((itemID: any) => {
+            const itemId = itemID;
             return sampleProducts.find(product => product.code === itemId);
           })
           .filter(Boolean); // Filter out undefined values
@@ -97,11 +97,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         await ApiService.fetch('/history', {
           method: 'POST',
           body: JSON.stringify({
-            action: 'view_product',
-            details: {
-              itemID: product.code,
-              productName: product.product_name
-            }
+            itemID: product.code, 
           })
         });
       } catch (historyError) {

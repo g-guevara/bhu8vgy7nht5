@@ -52,7 +52,7 @@ const ArticleSchema = new mongoose.Schema({
 const HistorySchema = new mongoose.Schema({
   userID: { type: String, required: true },
   action: { type: String, required: true },
-  details: { type: Object },
+  itemID: { type: String, required: true },
   timestamp: { type: Date, default: Date.now }
 }, { timestamps: true });
 
