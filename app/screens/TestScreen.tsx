@@ -5,20 +5,13 @@ import {
   Text,
   SafeAreaView,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { styles } from '../styles/TestStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
-import { sampleProducts } from '../data/productData';
-
-interface DayItem {
-  day: string;
-  date: number;
-  selected?: boolean;
-}
+import TestCalendar from '../components/Test/TestCalendar';
+import TestItem from '../components/Test/TestItem';
 
 interface TestItem {
   _id: string;
@@ -45,7 +38,7 @@ export default function TestScreen() {
   const { showToast } = useToast();
 
   // Datos de ejemplo para el calendario
-  const calendarDays: DayItem[] = [
+  const calendarDays = [
     { day: 'Sun', date: 10 },
     { day: 'Mon', date: 11 },
     { day: 'Tue', date: 12 },
@@ -108,31 +101,6 @@ export default function TestScreen() {
     }
   };
 
-  const formatRemainingTime = (test: TestItem) => {
-    const now = new Date();
-    const finishDate = new Date(test.finishDate);
-    const diffTime = finishDate.getTime() - now.getTime();
-    
-    if (diffTime <= 0) return '0 days, 0 hours';
-    
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    return `${diffDays} days, ${diffHours} hours`;
-  };
-
-  const getProductName = (productId: string) => {
-    // Look up the product name from the sampleProducts array
-    const product = sampleProducts.find(p => p.code === productId);
-    
-    if (product) {
-      return product.product_name;
-    }
-    
-    // Fallback if product not found
-    return `Product ${productId.substring(0, 8)}...`;
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
@@ -143,63 +111,21 @@ export default function TestScreen() {
       >
         <Text style={styles.headerText}>Test</Text>
 
-        {/* Calendar */}
-        <View style={styles.calendarContainer}>
-          {calendarDays.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.dayItem}
-              onPress={() => setSelectedDate(item.date)}
-            >
-              <Text style={styles.dayText}>{item.day}</Text>
-              {item.date === selectedDate ? (
-                <View style={styles.dateCircle}>
-                  <Text style={[styles.dateText, styles.selectedDateText]}>
-                    {item.date}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.dateText}>{item.date}</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Calendar Component */}
+        <TestCalendar 
+          calendarDays={calendarDays}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+        />
 
         {/* Active Tests Section */}
         <Text style={styles.sectionTitle}>Current tests</Text>
         
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-          </View>
-        ) : activeTests.length > 0 ? (
-          activeTests.map((test, index) => (
-            <View key={test._id} style={styles.currentTestContainer}>
-              <Text style={styles.currentTestTitle}>
-                Finish on {new Date(test.finishDate).toLocaleDateString()}
-              </Text>
-              <Text style={styles.currentTestSubtitle}>
-                {formatRemainingTime(test)} remain
-              </Text>
-              <Text style={styles.productName}>
-                Product: {getProductName(test.itemID)}
-              </Text>
-              <TouchableOpacity 
-                style={styles.finishButton}
-                onPress={() => handleFinishTest(test._id)}
-              >
-                <Text style={styles.finishButtonText}>Finish →</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No active tests</Text>
-            <Text style={styles.emptySubtext}>
-              Start a test from a product page
-            </Text>
-          </View>
-        )}
+        <TestItem 
+          activeTests={activeTests}
+          loading={loading}
+          handleFinishTest={handleFinishTest}
+        />
 
         {/* History */}
         <View style={styles.historyContainer}>
