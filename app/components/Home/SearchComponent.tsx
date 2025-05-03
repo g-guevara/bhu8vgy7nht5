@@ -1,4 +1,4 @@
-// Updated SearchComponent.tsx with fix for style error
+// Corrected SearchComponent.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -31,7 +31,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     setLoadingHistory(true);
     try {
       // Fetch the history from API
-      const historyResponse = await ApiService.fetch('/history?limit=2');
+      const historyResponse = await ApiService.fetch('/history');
       
       if (historyResponse && historyResponse.length > 0) {
         // Get the 2 most recent items
@@ -39,15 +39,23 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, 2);
           
+        console.log('Recent history items:', recentHistoryItems);
+          
         // Find corresponding products from sample data
+        // FIXED: Access the itemID property of each history object
         const historyProducts = recentHistoryItems
-          .map((itemID: any) => {
-            const itemId = itemID;
+          .map((historyItem: any) => {
+            const itemId = historyItem.itemID;
+            console.log('Looking for product with code:', itemId);
             return sampleProducts.find(product => product.code === itemId);
           })
           .filter(Boolean); // Filter out undefined values
         
+        console.log('History products found:', historyProducts.length);
         setHistoryItems(historyProducts);
+      } else {
+        console.log('No history items returned from API');
+        setHistoryItems([]);
       }
     } catch (error) {
       console.error('Error fetching history:', error);
@@ -130,8 +138,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         )}
       </View>
       <View style={searchStyles.productInfo}>
-        <Text style={searchStyles.productName}>{product.product_name}</Text>
-        <Text style={searchStyles.productBrand}>{product.brands}</Text>
+        <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
+          {product.product_name}
+        </Text>
+        <Text style={searchStyles.productBrand} numberOfLines={1} ellipsizeMode="tail">
+          {product.brands}
+        </Text>
       </View>
       <Text style={searchStyles.arrowIcon}>›</Text>
     </TouchableOpacity>
