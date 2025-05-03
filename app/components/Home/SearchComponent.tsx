@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleProducts } from '../../data/productData';
 import { searchStyles } from '../../styles/HomeComponentStyles';
+import { ApiService } from '../../services/api';
+
 
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
@@ -45,6 +47,24 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     try {
       // Store the selected product in AsyncStorage
       await AsyncStorage.setItem('selectedProduct', JSON.stringify(product));
+      
+      // Save to history database
+      try {
+        await ApiService.fetch('/history', {
+          method: 'POST',
+          body: JSON.stringify({
+            itemID: product.code,
+            action: 'view_product',
+            details: {
+              itemID: product.code,
+              productName: product.product_name
+            }
+          })
+        });
+      } catch (historyError) {
+        console.error('Error saving to history:', historyError);
+        // Continue with navigation even if history save fails
+      }
       
       // Navigate to product detail screen
       router.push('/screens/ProductInfoScreen');
