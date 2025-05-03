@@ -1,12 +1,11 @@
-// Updated SearchComponent.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+// Updated SearchComponent.tsx with fix for style error
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleProducts } from '../../data/productData';
 import { searchStyles } from '../../styles/HomeComponentStyles';
 import { ApiService } from '../../services/api';
-
 
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
@@ -15,14 +14,55 @@ interface SearchComponentProps {
 export default function SearchComponent({ onFocusChange }: SearchComponentProps) {
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
-  const [searchResults, setSearchResults] = useState(sampleProducts.slice(0, 2));
+  const [searchResults, setSearchResults] = useState<typeof sampleProducts>([]);
+  const [historyItems, setHistoryItems] = useState<typeof sampleProducts>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Fetch history only when component mounts
+  useEffect(() => {
+    if (!initialLoadDone) {
+      fetchHistoryItems();
+      setInitialLoadDone(true);
+    }
+  }, [initialLoadDone]);
+
+  const fetchHistoryItems = async () => {
+    setLoadingHistory(true);
+    try {
+      // Fetch the history from API
+      const historyResponse = await ApiService.fetch('/history?limit=2');
+      
+      if (historyResponse && historyResponse.length > 0) {
+        // Get the 2 most recent items
+        const recentHistoryItems = historyResponse
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 2);
+          
+        // Find corresponding products from sample data
+        const historyProducts = recentHistoryItems
+          .map((item: any) => {
+            const itemId = item.details?.itemID;
+            return sampleProducts.find(product => product.code === itemId);
+          })
+          .filter(Boolean); // Filter out undefined values
+        
+        setHistoryItems(historyProducts);
+      }
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   // Function to handle search
   const handleSearch = (text: string) => {
     setSearchText(text);
 
     if (text.trim() === '') {
-      setSearchResults(sampleProducts.slice(0, 2));
+      // When search is cleared, show history items
+      setSearchResults([]);
     } else {
       const filtered = sampleProducts.filter(product =>
         product.product_name.toLowerCase().includes(text.toLowerCase()) ||
@@ -38,7 +78,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     const name = product.product_name.toLowerCase();
     const ingredients = product.ingredients_text.toLowerCase();
 
-    if (name.includes('Null') || ingredients.includes('hafer')) return '';
+    if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
+    if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
+    if (name.includes('milk') || name.includes('dairy')) return '🥛';
+    if (name.includes('fruit') || name.includes('apple')) return '🍎';
+    if (name.includes('vegetable') || name.includes('carrot')) return '🥦';
 
     return '🍽️';
   };
@@ -53,7 +97,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         await ApiService.fetch('/history', {
           method: 'POST',
           body: JSON.stringify({
-            itemID: product.code,
             action: 'view_product',
             details: {
               itemID: product.code,
@@ -63,7 +106,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         });
       } catch (historyError) {
         console.error('Error saving to history:', historyError);
-        // Continue with navigation even if history save fails
       }
       
       // Navigate to product detail screen
@@ -72,6 +114,32 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       console.error('Error storing product in AsyncStorage:', error);
     }
   };
+
+  // Function to render a product item
+  const renderProductItem = (product: typeof sampleProducts[0]) => (
+    <TouchableOpacity
+      key={product.code}
+      style={searchStyles.productItem}
+      onPress={() => handleProductPress(product)}
+    >
+      <View style={searchStyles.productImageContainer}>
+        {product.image_url ? (
+          <Image
+            source={{ uri: product.image_url }}
+            style={searchStyles.productImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={searchStyles.productEmoji}>{getDefaultEmoji(product)}</Text>
+        )}
+      </View>
+      <View style={searchStyles.productInfo}>
+        <Text style={searchStyles.productName}>{product.product_name}</Text>
+        <Text style={searchStyles.productBrand}>{product.brands}</Text>
+      </View>
+      <Text style={searchStyles.arrowIcon}>›</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <>
@@ -106,37 +174,32 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           {searchText ? 'Search Results' : 'History'}
         </Text>
 
-        {searchResults.length > 0 ? (
+        {searchText && searchResults.length > 0 ? (
+          // Show search results
           <>
-            {searchResults.map(product => (
-              <TouchableOpacity
-                key={product.code}
-                style={searchStyles.productItem}
-                onPress={() => handleProductPress(product)}
-              >
-                <View style={searchStyles.productImageContainer}>
-                  {product.image_url ? (
-                    <Image
-                      source={{ uri: product.image_url }}
-                      style={searchStyles.productImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={searchStyles.productEmoji}>{getDefaultEmoji(product)}</Text>
-                  )}
-                </View>
-                <View style={searchStyles.productInfo}>
-                  <Text style={searchStyles.productName}>{product.product_name}</Text>
-                  <Text style={searchStyles.productBrand}>{product.brands}</Text>
-                </View>
-                <Text style={searchStyles.arrowIcon}>›</Text>
-              </TouchableOpacity>
-            ))}
+            {searchResults.map(product => renderProductItem(product))}
           </>
-        ) : (
+        ) : searchText && searchResults.length === 0 ? (
+          // No search results found
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>Try a different search term</Text>
+          </View>
+        ) : loadingHistory ? (
+          // Loading history - using noResultsContainer style instead of loadingContainer
+          <View style={searchStyles.noResultsContainer}>
+            <ActivityIndicator size="small" color="#000000" />
+          </View>
+        ) : historyItems.length > 0 ? (
+          // Show history items
+          <>
+            {historyItems.map(product => renderProductItem(product))}
+          </>
+        ) : (
+          // No history items
+          <View style={searchStyles.noResultsContainer}>
+            <Text style={searchStyles.noResultsText}>No recent products viewed</Text>
+            <Text style={searchStyles.noResultsSubtext}>Products you view will appear here</Text>
           </View>
         )}
       </View>

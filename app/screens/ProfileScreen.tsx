@@ -96,7 +96,7 @@ export default function ProfileScreen({ user, onLogout, onClose }: ProfileScreen
             <Svg width={24} height={24} viewBox="0 0 24 24" fill="#000">
               <Path
                 d="M6 18L18 6M6 6l12 12"
-                stroke="currentColor"
+                stroke="#000000"
                 strokeWidth={2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -320,11 +320,8 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#fff',
     marginBottom: 16,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+
+
   },
   avatarContainer: {
     marginBottom: 16,
@@ -342,7 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 16,
     padding: 16,
-    elevation: 1,
+
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -352,8 +349,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   infoLabel: {
     fontSize: 16,
@@ -369,12 +364,11 @@ const styles = StyleSheet.create({
   actionButton: {
     backgroundColor: '#fff',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 80,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    elevation: 1,
-    shadowColor: '#000',
+   shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -383,6 +377,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     color: '#333',
+
   },
   logoutButton: {
     backgroundColor: '#dc3545',

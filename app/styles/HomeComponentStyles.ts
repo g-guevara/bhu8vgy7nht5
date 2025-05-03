@@ -170,4 +170,9 @@ export const categoryStyles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
+loadingContainer: {
+  padding: 20,
+  alignItems: 'center',
+},
+
 });
