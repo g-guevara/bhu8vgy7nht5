@@ -1,17 +1,32 @@
-import React, { useState } from 'react';
+// app/screens/TestScreen.tsx
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { styles } from '../styles/TestStyles';
+import { ApiService } from '../services/api';
+import { useToast } from '../utils/ToastContext';
 
 interface DayItem {
   day: string;
   date: number;
   selected?: boolean;
+}
+
+interface TestItem {
+  _id: string;
+  userID: string;
+  itemID: string;
+  startDate: string;
+  finishDate: string;
+  completed: boolean;
+  result: 'Critic' | 'Sensitive' | 'Safe' | null;
 }
 
 interface HistoryItem {
@@ -23,6 +38,10 @@ interface HistoryItem {
 
 export default function TestScreen() {
   const [selectedDate, setSelectedDate] = useState(16);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTests, setActiveTests] = useState<TestItem[]>([]);
+  const { showToast } = useToast();
 
   // Datos de ejemplo para el calendario
   const calendarDays: DayItem[] = [
@@ -51,9 +70,70 @@ export default function TestScreen() {
     },
   ];
 
+  useEffect(() => {
+    fetchTests();
+  }, []);
+
+  const fetchTests = async () => {
+    setLoading(true);
+    try {
+      const tests = await ApiService.getTests();
+      // Only show tests that are not completed
+      const active = tests.filter((test: TestItem) => !test.completed);
+      setActiveTests(active);
+    } catch (error: any) {
+      console.error('Error fetching tests:', error);
+      showToast('Failed to load tests', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchTests();
+    setRefreshing(false);
+  };
+
+  const handleFinishTest = async (testId: string) => {
+    try {
+      await ApiService.completeTest(testId, null);
+      showToast('Test completed successfully', 'success');
+      // Refresh the test list
+      fetchTests();
+    } catch (error: any) {
+      console.error('Error completing test:', error);
+      showToast('Failed to complete test', 'error');
+    }
+  };
+
+  const formatRemainingTime = (test: TestItem) => {
+    const now = new Date();
+    const finishDate = new Date(test.finishDate);
+    const diffTime = finishDate.getTime() - now.getTime();
+    
+    if (diffTime <= 0) return '0 days, 0 hours';
+    
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    return `${diffDays} days, ${diffHours} hours`;
+  };
+
+  const getProductName = (productId: string) => {
+    // This is a placeholder. In a real app, you would fetch the product name from your data
+    // For now, we'll just return a formatted version of the ID
+    return `Product ${productId.substring(0, 4)}...`;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <Text style={styles.headerText}>Test</Text>
 
         {/* Calendar */}
@@ -78,16 +158,41 @@ export default function TestScreen() {
           ))}
         </View>
 
-        {/* Current Test */}
-        <Text style={styles.sectionTitle}>Current test</Text>
-        <View style={styles.currentTestContainer}>
-          <Text style={styles.currentTestTitle}>Finish in 19 of February</Text>
-          <Text style={styles.currentTestSubtitle}>2 days, 23 hours remain</Text>
-          <Text style={styles.productName}>Product: Peanut</Text>
-          <TouchableOpacity style={styles.finishButton}>
-            <Text style={styles.finishButtonText}>Finish →</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Active Tests Section */}
+        <Text style={styles.sectionTitle}>Current tests</Text>
+        
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+          </View>
+        ) : activeTests.length > 0 ? (
+          activeTests.map((test, index) => (
+            <View key={test._id} style={styles.currentTestContainer}>
+              <Text style={styles.currentTestTitle}>
+                Finish on {new Date(test.finishDate).toLocaleDateString()}
+              </Text>
+              <Text style={styles.currentTestSubtitle}>
+                {formatRemainingTime(test)} remain
+              </Text>
+              <Text style={styles.productName}>
+                Product: {getProductName(test.itemID)}
+              </Text>
+              <TouchableOpacity 
+                style={styles.finishButton}
+                onPress={() => handleFinishTest(test._id)}
+              >
+                <Text style={styles.finishButtonText}>Finish →</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No active tests</Text>
+            <Text style={styles.emptySubtext}>
+              Start a test from a product page
+            </Text>
+          </View>
+        )}
 
         {/* History */}
         <View style={styles.historyContainer}>

@@ -136,4 +136,31 @@ export const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  // Add these styles to app/styles/TestStyles.ts
+// in the StyleSheet.create({...}) object
+
+emptyContainer: {
+  padding: 20,
+  backgroundColor: '#F5F5F7',
+  borderRadius: 15,
+  alignItems: 'center',
+  marginHorizontal: 20,
+  marginBottom: 20,
+},
+emptyText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#666',
+  marginBottom: 5,
+},
+emptySubtext: {
+  fontSize: 14,
+  color: '#999',
+  textAlign: 'center',
+},
+loadingContainer: {
+  padding: 20,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
 });

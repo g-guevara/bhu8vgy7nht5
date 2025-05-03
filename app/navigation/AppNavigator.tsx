@@ -99,8 +99,8 @@ export default function AppNavigator({ user, onLogout }: AppNavigatorProps) {
         component={ReactionsScreen}
         options={{
           tabBarIcon: ({ focused, color, size }: TabBarIconProps) => (
-            <MaterialCommunityIcons
-              name="molecule"
+            <MaterialIcons
+              name="format-list-bulleted"
               size={size}
               color={focused ? '#4285F4' : '#888'}
             />

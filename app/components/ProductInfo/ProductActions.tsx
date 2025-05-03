@@ -1,7 +1,6 @@
 // app/components/ProductInfo/ProductActions.tsx
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, TouchableOpacity, Text, ActivityIndicator, Alert } from 'react-native';
 import { styles } from '../../styles/ProductInfoStyles';
 import { Product } from '../../data/productData';
 import { ApiService } from '../../services/api';
@@ -12,7 +11,6 @@ interface ProductActionsProps {
 }
 
 const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [isInWishlist, setIsInWishlist] = useState(false);
@@ -114,10 +112,14 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
     try {
       const test = await ApiService.startTest(product.code);
       setActiveTest(test);
-      showToast('Test started successfully! It will last for 3 days', 'success');
       
-      // Navigate to the Test screen
-      router.push('/screens/TestScreen');
+      // Show an alert with instructions instead of navigating
+      Alert.alert(
+        "Test Started",
+        "Your 3-day test for this product has been started successfully. Go to the Test tab to view details.",
+        [{ text: "OK", onPress: () => console.log("OK Pressed") }]
+      );
+      
     } catch (error: any) {
       console.error('Error starting test:', error);
       

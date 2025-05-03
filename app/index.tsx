@@ -17,7 +17,7 @@ import { getToken, removeToken } from "./lib/authUtils";
 import { ApiService } from "./services/api";
 
 // URL de tu API (reemplazar con la URL de Vercel cuando esté desplegado)
-const API_URL = "https://7ujm8uhb.vercel.app";
+const API_URL = "https://bhu8vgy7nht5.vercel.app/";
 
 export default function Index() {
   const [isLogin, setIsLogin] = useState(true);
