@@ -1,7 +1,7 @@
 // app/services/api.ts
 import { getToken } from '../lib/authUtils';
 
-const API_URL = "https://7ujm8uhb.vercel.app";
+const API_URL = "https://bhu8vgy7nht5.vercel.app/";
 
 export class ApiService {
   static async fetch(endpoint: string, options: RequestInit = {}) {
