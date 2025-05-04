@@ -59,7 +59,7 @@ const TestItem: React.FC<TestItemProps> = ({
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyText}>No active tests</Text>
         <Text style={styles.emptySubtext}>
-          Start a test from a product page
+        ⓘ Conduct a trial by testing your reaction to specific foods. Eat only one food at a time and allow a full digestion cycle to pass (3 to 5 days for an adult) to isolate its effects from other potential factors. If you experience an adverse reaction, it is recommended to wait 6 days before starting a new trial.
         </Text>
       </View>
     );

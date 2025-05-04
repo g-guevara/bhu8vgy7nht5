@@ -154,7 +154,7 @@ export default function TestScreen(): JSX.Element {
 
         {/* Active Tests Section */}
         <Text style={styles.sectionTitle}>
-         Tests
+         Current test
         </Text>
         
 
