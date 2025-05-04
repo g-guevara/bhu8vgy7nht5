@@ -31,21 +31,53 @@ export const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 5,
   },
+  todayText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+  },
   dateText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
   },
+  todayDateText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  selectedDateText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   dateCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#007AFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  selectedDateText: {
-    color: '#fff',
+  selectedDateCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+  },
+  testDateCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#E8F0FF', // Light blue background
+  },
+  todayCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
   },
   sectionTitle: {
     fontSize: 24,
@@ -71,8 +103,36 @@ export const styles = StyleSheet.create({
     color: '#444',
     marginBottom: 8,
   },
+  progressBarContainer: {
+    marginVertical: 12,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#D8E2F2',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'right',
+  },
   productName: {
     fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  testDatesContainer: {
+    marginVertical: 8,
+  },
+  testDateText: {
+    fontSize: 12,
     color: '#666',
   },
   finishButton: {
@@ -136,31 +196,28 @@ export const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  // Add these styles to app/styles/TestStyles.ts
-// in the StyleSheet.create({...}) object
-
-emptyContainer: {
-  padding: 20,
-  backgroundColor: '#F5F5F7',
-  borderRadius: 15,
-  alignItems: 'center',
-  marginHorizontal: 20,
-  marginBottom: 20,
-},
-emptyText: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: '#666',
-  marginBottom: 5,
-},
-emptySubtext: {
-  fontSize: 14,
-  color: '#999',
-  textAlign: 'center',
-},
-loadingContainer: {
-  padding: 20,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
+  emptyContainer: {
+    padding: 20,
+    backgroundColor: '#F5F5F7',
+    borderRadius: 15,
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 5,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

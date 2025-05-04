@@ -13,7 +13,8 @@ import { useToast } from '../utils/ToastContext';
 import TestCalendar from '../components/Test/TestCalendar';
 import TestItem from '../components/Test/TestItem';
 
-interface TestItem {
+// Define interfaces with specific types
+export interface TestItem {
   _id: string;
   userID: string;
   itemID: string;
@@ -23,58 +24,63 @@ interface TestItem {
   result: 'Critic' | 'Sensitive' | 'Safe' | null;
 }
 
-interface HistoryItem {
+export interface HistoryItem {
   date: string;
   name: string;
   status: 'Critic' | 'Safe';
   notes?: string;
 }
 
-export default function TestScreen() {
-  const [selectedDate, setSelectedDate] = useState(16);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+export default function TestScreen(): JSX.Element {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeTests, setActiveTests] = useState<TestItem[]>([]);
+  const [completedTests, setCompletedTests] = useState<TestItem[]>([]);
+  const [filteredTests, setFilteredTests] = useState<TestItem[]>([]);
   const { showToast } = useToast();
 
-  // Datos de ejemplo para el calendario
-  const calendarDays = [
-    { day: 'Sun', date: 10 },
-    { day: 'Mon', date: 11 },
-    { day: 'Tue', date: 12 },
-    { day: 'Wed', date: 13 },
-    { day: 'Thu', date: 14 },
-    { day: 'Fri', date: 15 },
-    { day: 'Sat', date: 16, selected: true },
-  ];
-
-  // Datos de ejemplo para el historial
-  const historyItems: HistoryItem[] = [
-    {
-      date: '3 Jun 2024',
-      name: 'Milk',
-      status: 'Critic',
-      notes: 'without notes',
-    },
-    {
-      date: '12 Oct 2024',
-      name: 'Blueberry',
-      status: 'Safe',
-      notes: 'Nota sobre el ítem uno un ouno. uno uno uno uno uno. un oun ou. no uosdfijasldf alsfidifj...',
-    },
-  ];
-
+  // Load tests on component mount
   useEffect(() => {
     fetchTests();
   }, []);
 
-  const fetchTests = async () => {
+  // Filter tests based on selected date
+  useEffect(() => {
+    if (activeTests.length > 0) {
+      const testsForSelectedDate = activeTests.filter((test: TestItem) => {
+        const testStartDate = new Date(test.startDate);
+        const testFinishDate = new Date(test.finishDate);
+        
+        // Check if selected date falls within this test period
+        return (selectedDate >= testStartDate && selectedDate <= testFinishDate);
+      });
+      
+      setFilteredTests(testsForSelectedDate);
+    }
+  }, [selectedDate, activeTests]);
+
+  const fetchTests = async (): Promise<void> => {
     setLoading(true);
     try {
       const tests = await ApiService.getTests();
-      // Only show tests that are not completed
+      
+      // Separate active and completed tests
       const active = tests.filter((test: TestItem) => !test.completed);
+      const completed = tests.filter((test: TestItem) => test.completed);
+      
       setActiveTests(active);
+      setCompletedTests(completed);
+      
+      // Filter tests for selected date
+      const testsForSelectedDate = active.filter((test: TestItem) => {
+        const testStartDate = new Date(test.startDate);
+        const testFinishDate = new Date(test.finishDate);
+        
+        return (selectedDate >= testStartDate && selectedDate <= testFinishDate);
+      });
+      
+      setFilteredTests(testsForSelectedDate);
     } catch (error: any) {
       console.error('Error fetching tests:', error);
       showToast('Failed to load tests', 'error');
@@ -83,13 +89,13 @@ export default function TestScreen() {
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
     await fetchTests();
     setRefreshing(false);
   };
 
-  const handleFinishTest = async (testId: string) => {
+  const handleFinishTest = async (testId: string): Promise<void> => {
     try {
       await ApiService.completeTest(testId, null);
       showToast('Test completed successfully', 'success');
@@ -100,6 +106,20 @@ export default function TestScreen() {
       showToast('Failed to complete test', 'error');
     }
   };
+
+  const formatDateForHistory = (dateString: string): string => {
+    const date = new Date(dateString);
+    // Format: "3 Jun 2024"
+    return `${date.getDate()} ${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+  };
+
+  // Convert completed tests to history items
+  const historyItems: HistoryItem[] = completedTests.map((test: TestItem): HistoryItem => ({
+    date: formatDateForHistory(test.finishDate),
+    name: test.itemID, // We would ideally get the product name from sampleProducts
+    status: test.result as 'Critic' | 'Safe' || 'Safe', // Default to 'Safe' if null
+    notes: '', // No notes in the database structure
+  }));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,16 +133,18 @@ export default function TestScreen() {
 
         {/* Calendar Component */}
         <TestCalendar 
-          calendarDays={calendarDays}
+          activeTests={activeTests}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
         />
 
         {/* Active Tests Section */}
-        <Text style={styles.sectionTitle}>Current tests</Text>
+        <Text style={styles.sectionTitle}>
+          {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} Tests
+        </Text>
         
         <TestItem 
-          activeTests={activeTests}
+          activeTests={filteredTests}
           loading={loading}
           handleFinishTest={handleFinishTest}
         />
@@ -130,23 +152,32 @@ export default function TestScreen() {
         {/* History */}
         <View style={styles.historyContainer}>
           <Text style={[styles.sectionTitle, { marginTop: 0 }]}>History</Text>
-          {historyItems.map((item, index) => (
-            <View key={index} style={styles.historyItem}>
-              <View style={styles.historyHeader}>
-                <Text style={styles.historyDate}>{item.date}</Text>
-                <Text style={[
-                  styles.historyStatus,
-                  item.status === 'Critic' ? styles.criticStatus : styles.safeStatus
-                ]}>
-                  {item.status}
-                </Text>
+          {historyItems.length > 0 ? (
+            historyItems.map((item: HistoryItem, index: number) => (
+              <View key={index} style={styles.historyItem}>
+                <View style={styles.historyHeader}>
+                  <Text style={styles.historyDate}>{item.date}</Text>
+                  <Text style={[
+                    styles.historyStatus,
+                    item.status === 'Critic' ? styles.criticStatus : styles.safeStatus
+                  ]}>
+                    {item.status}
+                  </Text>
+                </View>
+                <Text style={styles.historyItemName}>{item.name}</Text>
+                {item.notes && (
+                  <Text style={styles.historyNotes}>{item.notes}</Text>
+                )}
               </View>
-              <Text style={styles.historyItemName}>{item.name}</Text>
-              {item.notes && (
-                <Text style={styles.historyNotes}>{item.notes}</Text>
-              )}
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No test history</Text>
+              <Text style={styles.emptySubtext}>
+                Completed tests will appear here
+              </Text>
             </View>
-          ))}
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
