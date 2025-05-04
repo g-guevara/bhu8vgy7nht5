@@ -12,6 +12,7 @@ import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
 import TestCalendar from '../components/Test/TestCalendar';
 import TestItem from '../components/Test/TestItem';
+import { sampleProducts, Product } from '../data/productData';
 
 // Define interfaces with specific types
 export interface TestItem {
@@ -32,6 +33,7 @@ export interface HistoryItem {
 }
 
 export default function TestScreen(): JSX.Element {
+  // Initialize selected date to today - create a new Date object for today
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -113,10 +115,22 @@ export default function TestScreen(): JSX.Element {
     return `${date.getDate()} ${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
   };
 
+  const getProductName = (productId: string): string => {
+    // Look up the product name from the sampleProducts array
+    const product = sampleProducts.find((p: Product) => p.code === productId);
+    
+    if (product) {
+      return product.product_name;
+    }
+    
+    // Fallback if product not found
+    return `Product ${productId.substring(0, 8)}...`;
+  };
+
   // Convert completed tests to history items
   const historyItems: HistoryItem[] = completedTests.map((test: TestItem): HistoryItem => ({
     date: formatDateForHistory(test.finishDate),
-    name: test.itemID, // We would ideally get the product name from sampleProducts
+    name: getProductName(test.itemID), // Get product name instead of ID
     status: test.result as 'Critic' | 'Safe' || 'Safe', // Default to 'Safe' if null
     notes: '', // No notes in the database structure
   }));
