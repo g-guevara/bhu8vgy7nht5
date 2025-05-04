@@ -1,4 +1,4 @@
-// Corrected SearchComponent.tsx
+// Updated SearchComponent.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -34,22 +34,36 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       const historyResponse = await ApiService.fetch('/history');
       
       if (historyResponse && historyResponse.length > 0) {
-        // Get the 2 most recent items
+        // Get the most recent items
         const recentHistoryItems = historyResponse
-          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 2);
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           
         console.log('Recent history items:', recentHistoryItems);
           
         // Find corresponding products from sample data
         // FIXED: Access the itemID property of each history object
-        const historyProducts = recentHistoryItems
-          .map((historyItem: any) => {
-            const itemId = historyItem.itemID;
-            console.log('Looking for product with code:', itemId);
-            return sampleProducts.find(product => product.code === itemId);
-          })
-          .filter(Boolean); // Filter out undefined values
+        // NEW FIX: Use a Set to track unique product codes
+        const uniqueProductCodes = new Set<string>();
+        const historyProducts = [];
+        
+        for (const historyItem of recentHistoryItems) {
+          const itemId = historyItem.itemID;
+          console.log('Looking for product with code:', itemId);
+          
+          // Only process this item if we haven't seen this product code before
+          if (!uniqueProductCodes.has(itemId)) {
+            const product = sampleProducts.find(product => product.code === itemId);
+            if (product) {
+              uniqueProductCodes.add(itemId);
+              historyProducts.push(product);
+              
+              // If we already have 2 unique products, we can stop
+              if (historyProducts.length >= 2) {
+                break;
+              }
+            }
+          }
+        }
         
         console.log('History products found:', historyProducts.length);
         setHistoryItems(historyProducts);
