@@ -154,8 +154,10 @@ export default function TestScreen(): JSX.Element {
 
         {/* Active Tests Section */}
         <Text style={styles.sectionTitle}>
-          {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} Tests
+         Tests
         </Text>
+        
+
         
         <TestItem 
           activeTests={filteredTests}
