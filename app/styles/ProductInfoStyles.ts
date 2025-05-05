@@ -78,18 +78,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#E5E5E5',
     marginVertical: 16,
   },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  infoValue: {
-    fontSize: 17,
-  },
+
   sectionTitle: {
     fontSize: 22,
     fontWeight: '600',
@@ -234,5 +223,24 @@ export const styles = StyleSheet.create({
   activeTestButton: {
     backgroundColor: '#E6F7FF',
     borderColor: '#1890FF',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  infoLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginRight: 8,
+  },
+  infoValue: {
+    fontSize: 17,
+    flex: 1,
+  },
+  ingredientsText: {
+    flexWrap: 'wrap',
+    marginRight: 10,
+    lineHeight: 24,
   },
 });

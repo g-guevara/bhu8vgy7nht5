@@ -1,6 +1,6 @@
 // app/components/ProductInfo/ProductDetails.tsx
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { Product } from '../../data/productData';
 import { styles } from '../../styles/ProductInfoStyles';
 
@@ -18,9 +18,11 @@ const ProductDetails: React.FC<ProductDetailsProps> = ({ product }) => {
 
       <View style={styles.divider} />
 
-      <View style={styles.infoRow}>
+      <View>
         <Text style={styles.infoLabel}>Ingredients:</Text>
-        <Text style={styles.infoValue}>{product.ingredients_text}</Text>
+        <Text style={[styles.infoValue, styles.ingredientsText]}>
+          {product.ingredients_text}
+        </Text>
       </View>
     </>
   );
