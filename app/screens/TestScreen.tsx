@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   RefreshControl,
+  Alert
 } from 'react-native';
 import { styles } from '../styles/TestStyles';
 import { ApiService } from '../services/api';
@@ -99,10 +100,26 @@ export default function TestScreen(): JSX.Element {
 
   const handleFinishTest = async (testId: string): Promise<void> => {
     try {
-      await ApiService.completeTest(testId, null);
-      showToast('Test completed successfully', 'success');
-      // Refresh the test list
-      fetchTests();
+      // Show confirmation dialog
+      Alert.alert(
+        "Complete Test",
+        "Are you sure you want to mark this test as complete? You'll need to select a reaction type for this product.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Complete Test",
+            onPress: async () => {
+              await ApiService.completeTest(testId, null);
+              showToast('Test completed successfully', 'success');
+              // Refresh the test list
+              fetchTests();
+            }
+          }
+        ]
+      );
     } catch (error: any) {
       console.error('Error completing test:', error);
       showToast('Failed to complete test', 'error');
@@ -156,8 +173,6 @@ export default function TestScreen(): JSX.Element {
         <Text style={styles.sectionTitle}>
          Current test
         </Text>
-        
-
         
         <TestItem 
           activeTests={filteredTests}

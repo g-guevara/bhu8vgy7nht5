@@ -110,10 +110,24 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
 
     setTestLoading(true);
     try {
+      // Check if there's any active test (not just for this product)
+      const tests = await ApiService.getTests();
+      const anyActiveTest = tests.find((test: any) => !test.completed);
+      
+      if (anyActiveTest && anyActiveTest.itemID !== product.code) {
+        // Show enhanced alert about one test at a time limitation
+        Alert.alert(
+          "Cannot Start Test",
+          "You already have an active test in progress. Only one test can be performed at a time to ensure accurate results.",
+          [{ text: "OK", onPress: () => console.log("OK Pressed") }]
+        );
+        return;
+      }
+      
       const test = await ApiService.startTest(product.code);
       setActiveTest(test);
       
-      // Show an alert with instructions instead of navigating
+      // Show an alert with instructions
       Alert.alert(
         "Test Started",
         "Your 3-day test for this product has been started successfully. Go to the Test tab to view details.",
