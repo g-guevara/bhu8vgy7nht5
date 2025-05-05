@@ -86,6 +86,13 @@ const TestItem: React.FC<TestItemProps> = ({
           </TouchableOpacity>
         </View>
       ))}
+      
+      {/* New notification about one test at a time */}
+      <View style={styles.testLimitNotification}>
+        <Text style={styles.testLimitText}>
+          ⓘ Only one test can be performed at a time
+        </Text>
+      </View>
     </>
   );
 };

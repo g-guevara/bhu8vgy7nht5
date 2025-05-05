@@ -220,4 +220,16 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // New styles for the test limit notification
+  testLimitNotification: {
+    marginHorizontal: 20,
+    marginTop: -35, // Negative margin to bring it closer to the test container
+    padding: 12,
+
+  },
+  testLimitText: {
+    fontSize: 14,
+    color: '#999', // Dark amber text color
+    fontWeight: '500',
+  },
 });
