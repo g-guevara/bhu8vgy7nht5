@@ -115,29 +115,68 @@ const IngredientReaction = mongoose.model("IngredientReaction", IngredientReacti
 
 // Simple ID-based Authentication Middleware
 const authenticateUser = async (req, res, next) => {
-  const userId = req.headers['user-id'];
-
+  console.log('=========== AUTENTICACIÓN ===========');
+  console.log('Headers recibidos:', JSON.stringify(req.headers));
+  
+  // Intentar obtener el ID de usuario de diferentes formas posibles
+  const userId = req.headers['user-id'] || req.headers['User-ID'] || req.headers['userid'] || req.headers['userID'];
+  
+  console.log('User-ID encontrado:', userId || 'NO ENCONTRADO');
+  
   if (!userId) {
-    return res.status(401).json({ error: "Authentication required" });
+    console.log('Error: No se proporcionó User-ID');
+    return res.status(401).json({ error: "Authentication required - Missing User-ID" });
   }
 
   try {
-    // Check if user exists
+    // Buscar usuario en la base de datos
+    console.log('Buscando usuario con ID:', userId);
     const user = await User.findOne({ userID: userId });
+    
+    // Si no se encuentra por userID, intentar con _id
     if (!user) {
+      console.log('Usuario no encontrado por userID, intentando por _id');
+      const userById = await User.findOne({ _id: userId });
+      
+      if (userById) {
+        console.log('Usuario encontrado por _id');
+        req.user = {
+          userID: userById._id.toString(), // Convertir ObjectId a string si es necesario
+          email: userById.email,
+          name: userById.name
+        };
+        return next();
+      }
+      
+      console.log('Error: Usuario no encontrado');
       return res.status(403).json({ error: "Invalid user ID" });
     }
     
-    // Attach user information to the request
+    // Si llegamos aquí, el usuario se encontró correctamente
+    console.log('Usuario autenticado correctamente:', user.name);
+    
+    // Adjuntar información del usuario a la solicitud
     req.user = {
       userID: user.userID,
       email: user.email,
       name: user.name
     };
     
+    // Comprobar que las colecciones existan para este usuario
+    const testForUser = await Test.findOne({ userID: user.userID });
+    const wishlistForUser = await Wishlist.findOne({ userID: user.userID });
+    
+    console.log('Test para usuario:', testForUser ? 'Existe' : 'No existe');
+    console.log('Wishlist para usuario:', wishlistForUser ? 'Existe' : 'No existe');
+    
+    console.log('=========== FIN AUTENTICACIÓN ===========');
     next();
   } catch (error) {
-    return res.status(500).json({ error: "Authentication error" });
+    console.error('Error en autenticación:', error);
+    return res.status(500).json({ 
+      error: "Authentication error", 
+      details: error.message 
+    });
   }
 };
 
@@ -703,6 +742,75 @@ app.use((err, req, res, next) => {
     message: err.message 
   });
 });
+
+
+
+
+app.get("/diagnostico", async (req, res) => {
+  try {
+    // Información del sistema
+    const info = {
+      serverTime: new Date().toISOString(),
+      nodeVersion: process.version,
+      mongoConnection: mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado'
+    };
+    
+    // Contar documentos en colecciones principales
+    const usuarios = await User.countDocuments();
+    const tests = await Test.countDocuments();
+    const wishlists = await Wishlist.countDocuments();
+    
+    // Información adicional
+    const ultimosUsuarios = await User.find().sort({ createdAt: -1 }).limit(3).select('-password');
+    
+    // Devolver resultado
+    res.json({
+      info,
+      contadores: {
+        usuarios,
+        tests,
+        wishlists
+      },
+      ultimosUsuarios
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// IMPORTANTE: Bypasss de autenticación para emergencias
+// DESCOMENTAR SOLO SI NECESITAS UN ACCESO DE EMERGENCIA
+/*
+// Endpoint para crear un usuario de emergencia sin autenticación
+app.post("/emergency-user", async (req, res) => {
+  try {
+    const emergencyUser = new User({
+      userID: "emergency-" + Date.now(),
+      name: "Usuario Emergencia",
+      email: "emergencia@example.com",
+      password: await bcrypt.hash("password-temporal", 10),
+      language: "es"
+    });
+    
+    await emergencyUser.save();
+    
+    const userResponse = emergencyUser.toObject();
+    delete userResponse.password;
+    
+    res.status(201).json({
+      message: "Usuario de emergencia creado correctamente",
+      user: userResponse
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+*/
+
+
+
+
+
 
 // Middleware para asegurar que todas las respuestas sean JSON
 app.use((req, res, next) => {

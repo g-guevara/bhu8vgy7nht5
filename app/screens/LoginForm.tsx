@@ -76,39 +76,79 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
     }
   };
 
-  const handleLogin = async () => {
-    if (!loginEmail || !loginPassword) {
-      showToast('Please fill in all fields', 'error');
-      return;
-    }
+// Modificación para app/screens/LoginForm.tsx
+// Encuentra la función handleLogin y reemplázala por esta versión
 
-    setLoading(true);
-    try {
-      const response = await ApiService.login(loginEmail, loginPassword);
-      
-      // Save user data in SecureStore
-      if (response.user) {
-        await saveUser(response.user);
-      }
-      
-      onLogin(response.user);
-      showToast('Logged in', 'success');
-    } catch (error: any) {
-      console.error("Login error: ", error);
-      
-      if (error.message === 'Sesión expirada') {
-        showToast('Your session has expired, please log in again', 'error');
-      } else if (error.message.includes('Credenciales inválidas')) {
-        showToast('Invalid email or password', 'error');
-      } else if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        showToast('Please check your internet connection', 'error');
-      } else {
-        showToast(error.message || 'Login failed', 'error');
-      }
-    } finally {
-      setLoading(false);
+const handleLogin = async () => {
+  if (!loginEmail || !loginPassword) {
+    showToast('Please fill in all fields', 'error');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // Muestra información sobre la solicitud que se está haciendo
+    console.log('[Login] Intentando login con email:', loginEmail);
+    
+    const response = await ApiService.login(loginEmail, loginPassword);
+    
+    // Información de diagnóstico para la depuración
+    console.log('[Login] Respuesta completa:', JSON.stringify(response));
+    
+    // Verificar la estructura de la respuesta
+    if (!response.user) {
+      console.error('[Login] Error: La respuesta no contiene datos de usuario');
+      throw new Error('Respuesta de login inválida');
     }
-  };
+    
+    // Verificar si el usuario tiene ID
+    if (!response.user.userID && !response.user._id) {
+      console.error('[Login] Error: El usuario no tiene ID', response.user);
+      throw new Error('El usuario no tiene ID');
+    }
+    
+    // Save user data in SecureStore
+    console.log('[Login] Guardando usuario:', response.user);
+    await saveUser(response.user);
+    
+    // Ejecutar diagnóstico si está disponible
+    if (typeof ApiService.diagnosticarProblemas === 'function') {
+      console.log('[Login] Ejecutando diagnóstico...');
+      try {
+        await ApiService.diagnosticarProblemas();
+      } catch (diagError) {
+        console.error('[Login] Error en diagnóstico:', diagError);
+      }
+    }
+    
+    onLogin(response.user);
+    showToast('Logged in', 'success');
+  } catch (error: any) {
+    console.error("[Login] Error detallado: ", error);
+    
+    if (error.message === 'Sesión expirada') {
+      showToast('Your session has expired, please log in again', 'error');
+    } else if (error.message && error.message.includes('Credenciales inválidas')) {
+      showToast('Invalid email or password', 'error');
+    } else if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      showToast('Please check your internet connection', 'error');
+    } else {
+      showToast(error.message || 'Login failed', 'error');
+    }
+    
+    // Intentar ejecutar diagnóstico en caso de error, si está disponible
+    if (typeof ApiService.diagnosticarProblemas === 'function') {
+      console.log('[Login] Error en login, ejecutando diagnóstico...');
+      try {
+        await ApiService.diagnosticarProblemas();
+      } catch (diagError) {
+        console.error('[Login] Error en diagnóstico:', diagError);
+      }
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <View style={styles.formContainer}>

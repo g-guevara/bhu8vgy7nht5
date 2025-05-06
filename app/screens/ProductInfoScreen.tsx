@@ -298,6 +298,7 @@ export default function ProductInfoScreen() {
           <ProductReactions 
             selectedReaction={selectedReaction} 
             setSelectedReaction={setSelectedReaction} 
+            product={product} 
           />
           
           <View style={styles.divider} />
