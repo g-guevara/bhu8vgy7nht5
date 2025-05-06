@@ -133,4 +133,58 @@ export const styles = StyleSheet.create({
   activeTabItemText: {
     color: '#007aff',
   },
+  // Add these to app/styles/ReactionStyles.ts
+loadingContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+errorContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 20,
+},
+errorText: {
+  fontSize: 16,
+  color: '#666',
+  textAlign: 'center',
+  marginBottom: 15,
+},
+retryButton: {
+  backgroundColor: '#007AFF',
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+  borderRadius: 5,
+},
+retryButtonText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '500',
+},
+emptyContainer: {
+  padding: 40,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+emptyText: {
+  fontSize: 18,
+  fontWeight: '600',
+  color: '#666',
+  marginBottom: 10,
+},
+emptySubtext: {
+  fontSize: 14,
+  color: '#999',
+  textAlign: 'center',
+},
+foodImage: {
+  width: '100%',
+  height: '100%',
+  borderRadius: 10,
+},
+safeIndicator: {
+  backgroundColor: '#34C759',
+},
 });
