@@ -52,17 +52,7 @@ const ProductNotes: React.FC<ProductNotesProps> = ({
           {autoSaveStatus === 'saved' && (
             <Text style={styles.autoSaveText}>Saved</Text>
           )}
-          <TouchableOpacity 
-            style={[styles.saveNotesButton, !notes || isSaving ? styles.buttonDisabled : null]}
-            onPress={onSaveNotes}
-            disabled={!notes || isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.saveNotesButtonText}>Save</Text>
-            )}
-          </TouchableOpacity>
+
         </View>
       </View>
       <TextInput
@@ -72,11 +62,7 @@ const ProductNotes: React.FC<ProductNotesProps> = ({
         value={notes}
         onChangeText={handleChangeText}
       />
-      <View style={styles.characterLimitContainer}>
-        <Text style={[styles.characterLimitText, { color: getCharacterLimitColor() }]}>
-          {getRemainingCharacters()} characters remaining
-        </Text>
-      </View>
+
     </>
   );
 };

@@ -1,4 +1,4 @@
-// app/index.tsx
+// app/index.tsx - Completely removed JWT references
 import React, { useState, useEffect } from "react";
 import { 
   SafeAreaView,
@@ -14,7 +14,6 @@ import { User } from "./components/Login/User";
 import TabNavigator from "./navigation/TabNavigator";
 import { styles } from "./styles/IndexStyles";
 import { getUser, removeUser } from "./lib/authUtils";
-import { ApiService } from "./services/api";
 
 // URL de tu API (reemplazar con la URL de Vercel cuando esté desplegado)
 const API_URL = "https://bhu8vgy7nht5.vercel.app/";

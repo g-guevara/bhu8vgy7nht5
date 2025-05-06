@@ -1,7 +1,7 @@
-// app/contexts/AuthContext.tsx
+// app/utils/authContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../components/Login/User';
-import { getToken, saveToken, removeToken } from '../lib/authUtils';
+import { getUser, saveUser, removeUser } from '../lib/authUtils';
 import { ApiService } from '../services/api';
 
 interface AuthContextType {
@@ -24,25 +24,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkAuth = async () => {
     try {
-      const token = await getToken();
-      if (token) {
-        const response = await ApiService.fetch('/verify-token');
-        if (response.valid && response.user) {
-          setUser({
-            _id: response.user.userID,
-            userID: response.user.userID,
-            name: response.user.name,
-            email: response.user.email,
-            language: response.user.language || 'es',
-            trialPeriodDays: response.user.trialPeriodDays || 5
-          });
-        } else {
-          await removeToken();
-        }
+      const userData = await getUser();
+      if (userData) {
+        setUser(userData);
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      await removeToken();
+      await removeUser();
     } finally {
       setLoading(false);
     }
@@ -50,14 +38,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     const response = await ApiService.login(email, password);
-    if (response.token) {
-      await saveToken(response.token);
+    if (response.user) {
+      await saveUser(response.user);
       setUser(response.user);
     }
   };
 
   const logout = async () => {
-    await removeToken();
+    await removeUser();
     setUser(null);
   };
 

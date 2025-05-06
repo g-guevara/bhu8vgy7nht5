@@ -1,22 +1,22 @@
-// app/services/api.ts - JWT removed
+// app/services/api.ts - Complete fix removing all getToken references
 import { getUserId } from '../lib/authUtils';
 
 const API_URL = "https://bhu8vgy7nht5.vercel.app/";
 
 export class ApiService {
   static async fetch(endpoint: string, options: RequestInit = {}) {
-    const userId = await getUserId();
-    
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(userId ? { 'User-ID': userId } : {}),
-        ...options.headers,
-      },
-    };
-
     try {
+      const userId = await getUserId();
+      
+      const config: RequestInit = {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userId ? { 'User-ID': userId } : {}),
+          ...options.headers,
+        },
+      };
+
       const response = await fetch(`${API_URL}${endpoint}`, config);
       
       if (response.status === 401) {
@@ -126,28 +126,28 @@ export class ApiService {
     });
   }
 
-  static async startTest(productID: string) {
-    return this.fetch('/tests', {
-      method: 'POST',
-      body: JSON.stringify({ itemID: productID }),
-    });
-  }
+static async startTest(productID: string) {
+  return this.fetch('/tests', {
+    method: 'POST',
+    body: JSON.stringify({ itemID: productID }),
+  });
+}
 
-  static async updateProductNote(noteId: string, note: string, rating?: number) {
-    return this.fetch(`/productnotes/${noteId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ note, rating }),
-    });
-  }
+static async updateProductNote(noteId: string, note: string, rating?: number) {
+  return this.fetch(`/productnotes/${noteId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ note, rating }),
+  });
+}
 
-  static async getTests() {
-    return this.fetch('/tests');
-  }
+static async getTests() {
+  return this.fetch('/tests');
+}
 
-  static async completeTest(testId: string, result: 'Critic' | 'Sensitive' | 'Safe' | null) {
-    return this.fetch(`/tests/${testId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ result }),
-    });
-  }
+static async completeTest(testId: string, result: 'Critic' | 'Sensitive' | 'Safe' | null) {
+  return this.fetch(`/tests/${testId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ result }),
+  });
+}
 }
