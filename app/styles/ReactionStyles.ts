@@ -187,4 +187,57 @@ foodImage: {
 safeIndicator: {
   backgroundColor: '#34C759',
 },
+// Add these to app/styles/ReactionStyles.ts
+dictionaryContainer: {
+  flex: 1,
+  flexDirection: 'row',
+},
+ingredientScrollView: {
+  flex: 1,
+  paddingRight: 30, // Make room for alphabet sidebar
+},
+letterGroup: {
+  marginBottom: 15,
+},
+letterHeader: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  backgroundColor: '#f5f7f9',
+  paddingVertical: 5,
+  paddingHorizontal: 15,
+},
+ingredientItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 10,
+  paddingHorizontal: 15,
+  borderBottomWidth: 1,
+  borderBottomColor: '#f0f0f0',
+},
+ingredientName: {
+  fontSize: 16,
+  marginLeft: 15,
+},
+alphabetSidebar: {
+  position: 'absolute',
+  right: 5,
+  top: 0,
+  bottom: 0,
+  justifyContent: 'space-evenly',
+  alignItems: 'center',
+  paddingVertical: 10,
+},
+alphabetItem: {
+  padding: 2,
+},
+alphabetLetter: {
+  fontSize: 12,
+  color: '#bbb',
+},
+alphabetLetterActive: {
+  color: '#4285F4',
+  fontWeight: 'bold',
+},
+
+
 });
