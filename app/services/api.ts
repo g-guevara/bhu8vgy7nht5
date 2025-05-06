@@ -5,49 +5,73 @@ const API_URL = "https://bhu8vgy7nht5.vercel.app/";
 const DEBUG = true; // Cambiar a false en producción
 
 export class ApiService {
-  static async fetch(endpoint: string, options: RequestInit = {}) {
-    try {
-      const userId = await getUserId();
-      
-      if (DEBUG) {
-        console.log(`[API] Llamando a ${endpoint}`, {
-          userId: userId,
-          método: options.method || 'GET',
-          tieneBody: !!options.body
-        });
-      }
-      
-      const config: RequestInit = {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(userId ? { 'User-ID': userId } : {}),
-          ...options.headers,
-        },
-      };
-      
-      if (DEBUG) {
-        console.log(`[API] Headers de la petición:`, config.headers);
-      }
+// Update this section in app/services/api.ts
 
-      const response = await fetch(`${API_URL}${endpoint}`, config);
-      
-      if (response.status === 401) {
-        // Session expired or invalid
-        throw new Error('Sesión expirada');
-      }
-      
-      if (!response.ok) {
+static async fetch(endpoint: string, options: RequestInit = {}) {
+  try {
+    const userId = await getUserId();
+    
+    if (DEBUG) {
+      console.log(`[API] Calling ${endpoint}`, {
+        userId: userId,
+        method: options.method || 'GET',
+        hasBody: !!options.body
+      });
+    }
+    
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(userId ? { 'User-ID': userId } : {}),
+        ...options.headers,
+      },
+    };
+    
+    if (DEBUG) {
+      console.log(`[API] Request headers:`, config.headers);
+    }
+
+    const response = await fetch(`${API_URL}${endpoint}`, config);
+    
+    if (response.status === 401) {
+      // Session expired or invalid
+      throw new Error('Session expired');
+    }
+    
+    // Check content type before attempting to parse JSON
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+      console.error(`[API] Server returned non-JSON content type: ${contentType}`);
+      // Try to get text for debugging purposes
+      const text = await response.text();
+      console.error(`[API] Response starts with: ${text.substring(0, 100)}`);
+      throw new Error('Server returned unexpected response format');
+    }
+    
+    if (!response.ok) {
+      try {
         const error = await response.json();
         throw new Error(error.error || 'Error in the request');
+      } catch (jsonError) {
+        // If parsing the error response as JSON fails, throw a generic error
+        throw new Error(`Request failed with status ${response.status}`);
       }
-      
-      return response.json();
-    } catch (error) {
-      console.error('API Error:', error);
-      throw error;
     }
+    
+    try {
+      return await response.json();
+    } catch (jsonError) {
+      console.error('[API] JSON parse error:', jsonError);
+      throw new Error('Invalid response format from server');
+    }
+  } catch (error) {
+    console.error('API Error:', error);
+    throw error;
   }
+}
+
+
 
   // Función de diagnóstico para identificar problemas
   static async diagnosticarProblemas() {
@@ -242,6 +266,54 @@ export class ApiService {
       method: 'DELETE',
     });
   }
+
+
+  // Update app/services/api.ts with this improved method
+
+// Get ingredient reactions
+static async getIngredientReactions() {
+  console.log('[API] Fetching ingredient reactions...');
+  
+  try {
+    // Add a timestamp to prevent caching issues
+    const timestamp = new Date().getTime();
+    const endpoint = `/ingredient-reactions?t=${timestamp}`;
+    
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'User-ID': await getUserId() || '',
+        // Force accept JSON only
+        'Accept': 'application/json'
+      }
+    });
+    
+    // Log the response details for debugging
+    console.log(`[API] Response status: ${response.status}`);
+    console.log(`[API] Response content-type: ${response.headers.get('content-type')}`);
+    
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error(`[API] Non-JSON response, content-type: ${contentType}`);
+      // Try to get first part of text for debugging
+      const text = await response.text();
+      console.error(`[API] Response preview: ${text.substring(0, 100)}`);
+      throw new Error('Server returned non-JSON response');
+    }
+    
+    // Parse as JSON at this point
+    const data = await response.json();
+    console.log(`[API] Successfully fetched ${data.length} ingredient reactions`);
+    return data;
+  } catch (error) {
+    console.error('[API] Error fetching ingredient reactions:', error);
+    throw error;
+  }
+}
 
   static async getTests() {
     return this.fetch('/tests');

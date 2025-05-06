@@ -194,15 +194,20 @@ export default function ReactionsScreen() {
     }
   }, [ingredientReactions]);
 
+
   const fetchReactions = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch both product and ingredient reactions
-      const [productReactionsData, ingredientReactionsData] = await Promise.all([
-        ApiService.getProductReactions(),
-        ApiService.fetch('/ingredient-reactions') // Assuming this endpoint exists
-      ]);
+      // First fetch product reactions
+      let productReactionsData = [];
+      try {
+        productReactionsData = await ApiService.getProductReactions();
+        console.log('Product reactions fetched successfully:', productReactionsData.length);
+      } catch (productError) {
+        console.error('Error fetching product reactions:', productError);
+        showToast('Failed to load product reactions', 'error');
+      }
       
       // Process product reactions
       const productsWithReactions: ProductWithReaction[] = [];
@@ -220,17 +225,46 @@ export default function ReactionsScreen() {
       }
       
       setProductReactions(productsWithReactions);
-      setIngredientReactions(ingredientReactionsData);
+      
+      // Now fetch ingredient reactions separately
+      if (activeTab === 'Ing') {
+        showToast('Loading ingredient reactions...', 'success');
+      }
+      
+      try {
+        const ingredients = await ApiService.getIngredientReactions();
+        console.log('Successfully fetched ingredients data:', ingredients.length);
+        setIngredientReactions(ingredients);
+        
+        // Force grouping after data is set
+        setTimeout(() => {
+          groupIngredientsByFirstLetter();
+        }, 100);
+      } catch (ingredientError) {
+        console.error('Error fetching ingredient reactions:', ingredientError);
+        setIngredientReactions([]);
+        
+        if (activeTab === 'Ing') {
+          showToast('Could not load ingredient reactions', 'error');
+        }
+      }
     } catch (error: any) {
-      console.error('Error fetching reactions:', error);
+      console.error('Error in main reactions fetch flow:', error);
       setError(error.message || 'Failed to load reactions');
       showToast('Failed to load reactions', 'error');
     } finally {
       setLoading(false);
     }
   };
-
+  // Update the groupIngredientsByFirstLetter function to be more robust
   const groupIngredientsByFirstLetter = () => {
+    console.log('Grouping ingredients, count:', ingredientReactions.length);
+    if (!ingredientReactions || ingredientReactions.length === 0) {
+      console.log('No ingredients to group');
+      setGroupedIngredients([]);
+      return;
+    }
+    
     // Sort ingredients alphabetically
     const sortedIngredients = [...ingredientReactions].sort((a, b) => 
       a.ingredientName.localeCompare(b.ingredientName)
@@ -242,6 +276,11 @@ export default function ReactionsScreen() {
     let currentGroup: IngredientReaction[] = [];
     
     sortedIngredients.forEach(ingredient => {
+      if (!ingredient.ingredientName) {
+        console.warn('Ingredient without name found:', ingredient);
+        return;
+      }
+      
       const firstLetter = ingredient.ingredientName.charAt(0).toUpperCase();
       
       if (firstLetter !== currentLetter) {
@@ -260,6 +299,7 @@ export default function ReactionsScreen() {
       groups.push({ letter: currentLetter, items: currentGroup });
     }
     
+    console.log('Grouped ingredients into', groups.length, 'letter groups');
     setGroupedIngredients(groups);
   };
 

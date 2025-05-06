@@ -850,6 +850,48 @@ app.get("/diagnostico", async (req, res) => {
   }
 });
 
+
+app.get("/ingredient-reactions", authenticateUser, async (req, res) => {
+  console.log("[DEBUG] Received request for /ingredient-reactions");
+  console.log("[DEBUG] User ID:", req.user.userID);
+  
+  try {
+    // Find all ingredient reactions for this user
+    const reactions = await IngredientReaction.find({ userID: req.user.userID });
+    console.log("[DEBUG] Found ingredient reactions:", reactions.length);
+    
+    // Ensure we're sending JSON content type
+    res.setHeader('Content-Type', 'application/json');
+    res.json(reactions);
+  } catch (error) {
+    console.error("[ERROR] Failed to fetch ingredient reactions:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // IMPORTANTE: Bypasss de autenticación para emergencias
 // DESCOMENTAR SOLO SI NECESITAS UN ACCESO DE EMERGENCIA
 /*
