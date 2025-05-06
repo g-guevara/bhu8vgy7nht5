@@ -5,6 +5,32 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 // Removed JWT import
 
+// Connection pooling implementation
+let cachedDb = null;
+
+async function connectToDatabase() {
+  if (cachedDb && mongoose.connection.readyState === 1) {
+    return cachedDb;
+  }
+
+  // Connection options optimized for serverless
+  const options = {
+    dbName: "sensitivv",
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    maxPoolSize: 10, // Adjust based on your needs
+    serverSelectionTimeoutMS: 30000, // 30 seconds
+    socketTimeoutMS: 45000, // 45 seconds
+  };
+
+  // Connect to the database
+  const client = await mongoose.connect(process.env.MONGODB_URI, options);
+  console.log("Connected to MongoDB");
+  
+  cachedDb = client;
+  return client;
+}
+
 const app = express();
 // Configuración detallada de CORS
 app.use(cors({
@@ -17,12 +43,40 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Conexión a MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  dbName: "sensitivv",
-})
-.then(() => console.log("Conectado a MongoDB"))
-.catch(err => console.error("Error conectando a MongoDB:", err));
+// Connection status check middleware
+app.use(async (req, res, next) => {
+  // Skip connection check for non-DB routes
+  if (req.path === '/' || req.path === '/health') {
+    return next();
+  }
+  
+  try {
+    // Check if we're connected, reconnect if needed
+    if (mongoose.connection.readyState !== 1) {
+      console.log("MongoDB not connected, reconnecting...");
+      await connectToDatabase();
+    }
+    next();
+  } catch (error) {
+    console.error("Database connection error in middleware:", error);
+    return res.status(500).json({ error: "Database connection error" });
+  }
+});
+
+// Initialize database connection
+connectToDatabase()
+  .then(() => console.log("Database connection ready"))
+  .catch(err => console.error("MongoDB connection error:", err));
+
+// Connection error handling
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected, attempting to reconnect...');
+  connectToDatabase();
+});
 
 // Schemas
 
@@ -181,6 +235,24 @@ const authenticateUser = async (req, res, next) => {
 };
 
 // RUTAS
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStateMap = {
+    0: "disconnected",
+    1: "connected",
+    2: "connecting",
+    3: "disconnecting"
+  };
+  
+  res.json({
+    status: "ok",
+    dbState: dbStateMap[dbState] || "unknown",
+    uptime: process.uptime(),
+    timestamp: new Date()
+  });
+});
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -806,10 +878,6 @@ app.post("/emergency-user", async (req, res) => {
   }
 });
 */
-
-
-
-
 
 
 // Middleware para asegurar que todas las res
