@@ -559,6 +559,38 @@ app.put("/tests/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Add this to your server.js file
+// Version: 1.0.0
+
+// Update an existing product note
+app.put("/productnotes/:id", authenticateToken, async (req, res) => {
+  try {
+    const noteId = req.params.id;
+    const { note, rating } = req.body;
+    
+    // Find the note by ID and ensure it belongs to the authenticated user
+    const existingNote = await ProductNote.findOne({ 
+      _id: noteId,
+      userID: req.user.userID 
+    });
+    
+    if (!existingNote) {
+      return res.status(404).json({ error: "Note not found or not authorized to update" });
+    }
+    
+    // Update the note
+    existingNote.note = note;
+    if (rating !== undefined) {
+      existingNote.rating = rating;
+    }
+    
+    await existingNote.save();
+    res.json(existingNote);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 
 

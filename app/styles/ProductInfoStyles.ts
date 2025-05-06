@@ -243,4 +243,38 @@ export const styles = StyleSheet.create({
     marginRight: 10,
     lineHeight: 24,
   },
+
+  // app/styles/ProductInfoStyles.ts
+// Version: 1.2.0
+// Add these new styles to your existing styles object
+
+saveNotesButton: {
+  backgroundColor: '#007AFF',
+  paddingVertical: 8,
+  paddingHorizontal: 16,
+  borderRadius: 5,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+saveNotesButtonText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '600',
+},
+
+characterLimitContainer: {
+  alignItems: 'flex-end',
+  marginTop: 4,
+  marginBottom: 16,
+},
+characterLimitText: {
+  fontSize: 12,
+  color: '#8E8E93',
+},
+autoSaveText: {
+  fontSize: 12,
+  color: '#8E8E93',
+  marginRight: 10,
+  fontStyle: 'italic',
+}
 });

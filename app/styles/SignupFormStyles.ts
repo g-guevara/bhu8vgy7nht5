@@ -104,16 +104,11 @@ export const styles = StyleSheet.create<SignupFormStylesType>({
     color: "#fff",
   },
 
-
   formContainer: {
     backgroundColor: "#fff",
     padding: 20,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderRadius: 20,
+
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',

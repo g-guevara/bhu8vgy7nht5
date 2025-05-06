@@ -133,6 +133,13 @@ static async startTest(productID: string) {
   });
 }
 
+static async updateProductNote(noteId: string, note: string, rating?: number) {
+  return this.fetch(`/productnotes/${noteId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ note, rating }),
+  });
+}
+
 static async getTests() {
   return this.fetch('/tests');
 }
