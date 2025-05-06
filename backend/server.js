@@ -88,6 +88,20 @@ const TestSchema = new mongoose.Schema({
   result: { type: String, enum: ['Critic', 'Sensitive', 'Safe', null], default: null }
 }, { timestamps: true });
 
+// Product Reaction Schema
+const ProductReactionSchema = new mongoose.Schema({
+  userID: { type: String, required: true },
+  productID: { type: String, required: true },
+  reaction: { type: String, enum: ['Critic', 'Sensitive', 'Safe'], required: true }
+}, { timestamps: true });
+
+// Ingredient Reaction Schema
+const IngredientReactionSchema = new mongoose.Schema({
+  userID: { type: String, required: true },
+  ingredientName: { type: String, required: true },
+  reaction: { type: String, enum: ['Critic', 'Sensitive', 'Safe'], required: true }
+}, { timestamps: true });
+
 // Modelos
 const User = mongoose.model("User", UserSchema, "user");
 const Article = mongoose.model("Article", ArticleSchema, "articles");
@@ -96,6 +110,8 @@ const ProductIngredient = mongoose.model("ProductIngredient", ProductIngredientS
 const ProductNote = mongoose.model("ProductNote", ProductNoteSchema, "productnotes");
 const Wishlist = mongoose.model("Wishlist", WishlistSchema, "wishlist");
 const Test = mongoose.model("Test", TestSchema, "tests");
+const ProductReaction = mongoose.model("ProductReaction", ProductReactionSchema, "productreactions");
+const IngredientReaction = mongoose.model("IngredientReaction", IngredientReactionSchema, "ingredientreactions");
 
 // Simple ID-based Authentication Middleware
 const authenticateUser = async (req, res, next) => {
@@ -563,6 +579,112 @@ app.put("/productnotes/:id", authenticateUser, async (req, res) => {
     
     await existingNote.save();
     res.json(existingNote);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get product reactions
+app.get("/product-reactions", authenticateUser, async (req, res) => {
+  try {
+    const reactions = await ProductReaction.find({ userID: req.user.userID });
+    res.json(reactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save product reaction
+app.post("/product-reactions", authenticateUser, async (req, res) => {
+  try {
+    const { productID, reaction } = req.body;
+    
+    // Check if reaction already exists for this product
+    let existingReaction = await ProductReaction.findOne({
+      userID: req.user.userID,
+      productID
+    });
+    
+    if (existingReaction) {
+      // Update existing reaction
+      existingReaction.reaction = reaction;
+      await existingReaction.save();
+      res.json(existingReaction);
+    } else {
+      // Create new reaction
+      const newReaction = new ProductReaction({
+        userID: req.user.userID,
+        productID,
+        reaction
+      });
+      
+      await newReaction.save();
+      res.status(201).json(newReaction);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete product reaction
+app.delete("/product-reactions/:productID", authenticateUser, async (req, res) => {
+  try {
+    const { productID } = req.params;
+    
+    await ProductReaction.deleteOne({
+      userID: req.user.userID,
+      productID
+    });
+    
+    res.json({ message: "Reaction deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save ingredient reaction
+app.post("/ingredient-reactions", authenticateUser, async (req, res) => {
+  try {
+    const { ingredientName, reaction } = req.body;
+    
+    // Check if reaction already exists for this ingredient
+    let existingReaction = await IngredientReaction.findOne({
+      userID: req.user.userID,
+      ingredientName
+    });
+    
+    if (existingReaction) {
+      // Update existing reaction
+      existingReaction.reaction = reaction;
+      await existingReaction.save();
+      res.json(existingReaction);
+    } else {
+      // Create new reaction
+      const newReaction = new IngredientReaction({
+        userID: req.user.userID,
+        ingredientName,
+        reaction
+      });
+      
+      await newReaction.save();
+      res.status(201).json(newReaction);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete ingredient reaction
+app.delete("/ingredient-reactions/:ingredientName", authenticateUser, async (req, res) => {
+  try {
+    const { ingredientName } = req.params;
+    
+    await IngredientReaction.deleteOne({
+      userID: req.user.userID,
+      ingredientName
+    });
+    
+    res.json({ message: "Ingredient reaction deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

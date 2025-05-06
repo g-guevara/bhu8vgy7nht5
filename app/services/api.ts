@@ -140,6 +140,58 @@ static async updateProductNote(noteId: string, note: string, rating?: number) {
   });
 }
 
+
+
+// Add these methods to app/services/api.ts
+
+// Save product reaction
+static async saveProductReaction(productID: string, reaction: string) {
+  return this.fetch('/product-reactions', {
+    method: 'POST',
+    body: JSON.stringify({ 
+      productID, 
+      reaction 
+    }),
+  });
+}
+
+// Get product reactions
+static async getProductReactions() {
+  return this.fetch('/product-reactions');
+}
+
+// Delete product reaction
+static async deleteProductReaction(productID: string) {
+  return this.fetch(`/product-reactions/${productID}`, {
+    method: 'DELETE',
+  });
+}
+
+// Save ingredient reaction
+static async saveIngredientReaction(ingredientName: string, reaction: string) {
+  return this.fetch('/ingredient-reactions', {
+    method: 'POST',
+    body: JSON.stringify({ 
+      ingredientName, 
+      reaction 
+    }),
+  });
+}
+
+// Delete ingredient reaction
+static async deleteIngredientReaction(ingredientName: string) {
+  return this.fetch(`/ingredient-reactions/${encodeURIComponent(ingredientName)}`, {
+    method: 'DELETE',
+  });
+}
+
+
+
+
+
+
+
+
 static async getTests() {
   return this.fetch('/tests');
 }
