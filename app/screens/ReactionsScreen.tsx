@@ -569,7 +569,7 @@ export default function ReactionsScreen() {
     );
   };
 
-  // Main render function for content based on active tab
+  // Main render function for content based on a
   const renderContent = () => {
     if (activeTab === 'Ing') {
       return renderIngredientsTab();
