@@ -1,5 +1,5 @@
 // app/screens/ReactionsScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -170,6 +170,17 @@ const localStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  statusBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  statusText: {
+    fontSize: 12,
+    color: '#666',
+  }
 });
 
 export default function ReactionsScreen() {
@@ -182,31 +193,56 @@ export default function ReactionsScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   
+  // Add refs for component lifecycle and state management
+  const isMounted = useRef(true);
+  const isGroupingInProgress = useRef(false);
+  const lastIngredientsCount = useRef(0);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  
   // Fetch reactions when component mounts
   useEffect(() => {
     fetchReactions();
   }, []);
 
-  // Group ingredients alphabetically whenever ingredient reactions change
+  // Group ingredients whenever they change or when switching to the Ing tab
   useEffect(() => {
+    console.log('Ingredient reactions changed, count:', ingredientReactions.length);
+    lastIngredientsCount.current = ingredientReactions.length;
+    
     if (ingredientReactions.length > 0) {
       groupIngredientsByFirstLetter();
     }
   }, [ingredientReactions]);
 
+  // Special handling for tab changes
+  useEffect(() => {
+    console.log('Tab changed to:', activeTab);
+    if (activeTab === 'Ing' && ingredientReactions.length > 0 && groupedIngredients.length === 0) {
+      console.log('Tab switched to Ing, regrouping ingredients');
+      groupIngredientsByFirstLetter();
+    }
+  }, [activeTab]);
 
   const fetchReactions = async () => {
+    if (!isMounted.current) return;
+    
     setLoading(true);
     setError(null);
     try {
-      // First fetch product reactions
+      // Fetch product reactions first
       let productReactionsData = [];
       try {
         productReactionsData = await ApiService.getProductReactions();
         console.log('Product reactions fetched successfully:', productReactionsData.length);
       } catch (productError) {
         console.error('Error fetching product reactions:', productError);
-        showToast('Failed to load product reactions', 'error');
+        showToast('Failed to load product reactions', 'warning');
       }
       
       // Process product reactions
@@ -224,83 +260,109 @@ export default function ReactionsScreen() {
         }
       }
       
-      setProductReactions(productsWithReactions);
-      
-      // Now fetch ingredient reactions separately
-      if (activeTab === 'Ing') {
-        showToast('Loading ingredient reactions...', 'success');
+      if (isMounted.current) {
+        setProductReactions(productsWithReactions);
       }
       
+      // Then try to fetch ingredient reactions separately
       try {
-        const ingredients = await ApiService.getIngredientReactions();
-        console.log('Successfully fetched ingredients data:', ingredients.length);
-        setIngredientReactions(ingredients);
+        const ingredientsData = await ApiService.getIngredientReactions();
+        console.log('Successfully fetched ingredient reactions:', ingredientsData.length);
         
-        // Force grouping after data is set
-        setTimeout(() => {
-          groupIngredientsByFirstLetter();
-        }, 100);
+        if (isMounted.current) {
+          // Important: Make a deep copy to prevent referential issues
+          const ingredientsCopy = JSON.parse(JSON.stringify(ingredientsData));
+          setIngredientReactions(ingredientsCopy);
+          // Let the useEffect handle grouping instead of calling directly here
+        }
       } catch (ingredientError) {
         console.error('Error fetching ingredient reactions:', ingredientError);
-        setIngredientReactions([]);
-        
-        if (activeTab === 'Ing') {
-          showToast('Could not load ingredient reactions', 'error');
+        if (isMounted.current) {
+          // Don't reset if we already have data
+          if (ingredientReactions.length === 0) {
+            setIngredientReactions([]);
+            showToast('Could not load ingredient reactions', 'error');
+          }
         }
       }
     } catch (error: any) {
       console.error('Error in main reactions fetch flow:', error);
-      setError(error.message || 'Failed to load reactions');
-      showToast('Failed to load reactions', 'error');
+      if (isMounted.current) {
+        setError(error.message || 'Failed to load reactions');
+        showToast('Failed to load reactions', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
-  // Update the groupIngredientsByFirstLetter function to be more robust
+
   const groupIngredientsByFirstLetter = () => {
-    console.log('Grouping ingredients, count:', ingredientReactions.length);
+    // Avoid concurrent grouping operations
+    if (isGroupingInProgress.current) {
+      console.log('Grouping already in progress, skipping');
+      return;
+    }
+    
     if (!ingredientReactions || ingredientReactions.length === 0) {
       console.log('No ingredients to group');
       setGroupedIngredients([]);
       return;
     }
     
-    // Sort ingredients alphabetically
-    const sortedIngredients = [...ingredientReactions].sort((a, b) => 
-      a.ingredientName.localeCompare(b.ingredientName)
-    );
+    console.log('Starting grouping process for', ingredientReactions.length, 'ingredients');
+    isGroupingInProgress.current = true;
     
-    // Group by first letter
-    const groups: AlphabeticalGroup[] = [];
-    let currentLetter = '';
-    let currentGroup: IngredientReaction[] = [];
-    
-    sortedIngredients.forEach(ingredient => {
-      if (!ingredient.ingredientName) {
-        console.warn('Ingredient without name found:', ingredient);
-        return;
-      }
+    try {
+      // Create a local copy to prevent concurrent modification issues
+      const reactions = [...ingredientReactions];
+      console.log('Working with reactions copy, length:', reactions.length);
       
-      const firstLetter = ingredient.ingredientName.charAt(0).toUpperCase();
+      // Sort ingredients alphabetically
+      const sortedIngredients = reactions.sort((a, b) => 
+        (a.ingredientName || '').localeCompare(b.ingredientName || '')
+      );
       
-      if (firstLetter !== currentLetter) {
-        if (currentGroup.length > 0) {
-          groups.push({ letter: currentLetter, items: currentGroup });
+      // Group by first letter
+      const groups: AlphabeticalGroup[] = [];
+      let currentLetter = '';
+      let currentGroup: IngredientReaction[] = [];
+      
+      sortedIngredients.forEach(ingredient => {
+        if (!ingredient.ingredientName) {
+          console.warn('Ingredient without name found:', ingredient);
+          return;
         }
-        currentLetter = firstLetter;
-        currentGroup = [ingredient];
-      } else {
-        currentGroup.push(ingredient);
+        
+        const firstLetter = ingredient.ingredientName.charAt(0).toUpperCase();
+        
+        if (firstLetter !== currentLetter) {
+          if (currentGroup.length > 0) {
+            groups.push({ letter: currentLetter, items: [...currentGroup] });
+          }
+          currentLetter = firstLetter;
+          currentGroup = [ingredient];
+        } else {
+          currentGroup.push(ingredient);
+        }
+      });
+      
+      // Add last group
+      if (currentGroup.length > 0) {
+        groups.push({ letter: currentLetter, items: [...currentGroup] });
       }
-    });
-    
-    // Add last group
-    if (currentGroup.length > 0) {
-      groups.push({ letter: currentLetter, items: currentGroup });
+      
+      console.log('Grouped ingredients into', groups.length, 'letter groups');
+      // Only update state if component is still mounted
+      if (isMounted.current) {
+        setGroupedIngredients(groups);
+      }
+    } catch (error) {
+      console.error('Error during grouping:', error);
+    } finally {
+      isGroupingInProgress.current = false;
     }
-    
-    console.log('Grouped ingredients into', groups.length, 'letter groups');
-    setGroupedIngredients(groups);
   };
 
   const handleTabPress = (tabName: TabName): void => {
@@ -371,41 +433,58 @@ export default function ReactionsScreen() {
     }
   };
 
-  // Render ingredient item for the ingredients dictionary
-  const renderIngredientItem = (ingredient: IngredientReaction) => (
-    <View key={ingredient._id} style={localStyles.ingredientItem}>
-      <View style={[localStyles.reactionDot, getReactionDotStyle(ingredient.reaction)]} />
-      <Text style={localStyles.ingredientName}>{ingredient.ingredientName}</Text>
-    </View>
-  );
+  // Render ingredient item with better error handling
+  const renderIngredientItem = (ingredient: IngredientReaction) => {
+    if (!ingredient || !ingredient.ingredientName) {
+      console.warn('Invalid ingredient:', ingredient);
+      return null;
+    }
+    
+    // Validate reaction value
+    const validReaction = ['Critic', 'Sensitive', 'Safe'].includes(ingredient.reaction) 
+      ? ingredient.reaction as 'Critic' | 'Sensitive' | 'Safe'
+      : 'Safe';
+    
+    return (
+      <View key={ingredient._id} style={localStyles.ingredientItem}>
+        <View style={[localStyles.reactionDot, getReactionDotStyle(validReaction)]} />
+        <Text style={localStyles.ingredientName}>{ingredient.ingredientName}</Text>
+      </View>
+    );
+  };
 
   // Render letter group for ingredients dictionary
-  const renderLetterGroup = (group: AlphabeticalGroup) => (
-    <View key={group.letter} style={localStyles.letterGroup}>
-      <Text style={localStyles.letterHeader}>{group.letter}</Text>
-      {group.items.map(ingredient => renderIngredientItem(ingredient))}
-    </View>
-  );
-
-  const filteredProducts = getFilteredProducts();
-  const groupedProducts = groupProductsByReaction(filteredProducts);
+  const renderLetterGroup = (group: AlphabeticalGroup) => {
+    if (!group || !group.letter || !group.items || group.items.length === 0) {
+      console.warn('Invalid letter group:', group);
+      return null;
+    }
+    
+    return (
+      <View key={group.letter} style={localStyles.letterGroup}>
+        <Text style={localStyles.letterHeader}>{group.letter}</Text>
+        {group.items.map(ingredient => renderIngredientItem(ingredient))}
+      </View>
+    );
+  };
 
   // Render the alphabet sidebar for ingredients
   const renderAlphabetSidebar = () => {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const activeLetters = groupedIngredients.map(g => g.letter);
+    
     return (
       <View style={localStyles.alphabetSidebar}>
         {alphabet.map(letter => (
           <TouchableOpacity 
             key={letter}
             style={localStyles.alphabetItem}
-            // You could add onPress to scroll to that letter if needed
+            // Could add scrolling to letter section here if needed
           >
             <Text 
               style={[
                 localStyles.alphabetLetter,
-                // Highlight letters that have ingredients
-                groupedIngredients.some(g => g.letter === letter) ? localStyles.alphabetLetterActive : {}
+                activeLetters.includes(letter) ? localStyles.alphabetLetterActive : {}
               ]}
             >
               {letter}
@@ -416,9 +495,91 @@ export default function ReactionsScreen() {
     );
   };
 
-  // Render the main content based on the active tab
+  // Separate rendering logic for ingredients tab
+  const renderIngredientsTab = () => {
+    if (loading && ingredientReactions.length === 0) {
+      return (
+        <View style={localStyles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={{ marginTop: 15 }}>Loading ingredient reactions...</Text>
+        </View>
+      );
+    }
+    
+    if (error && ingredientReactions.length === 0) {
+      return (
+        <View style={localStyles.errorContainer}>
+          <Text style={localStyles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={localStyles.retryButton}
+            onPress={fetchReactions}
+          >
+            <Text style={localStyles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    if (ingredientReactions.length === 0) {
+      return (
+        <View style={localStyles.emptyContainer}>
+          <Text style={localStyles.emptyText}>No ingredient reactions found</Text>
+          <Text style={localStyles.emptySubtext}>
+            Ingredients you mark as Critic, Sensitive, or Safe will appear here
+          </Text>
+          <TouchableOpacity 
+            style={{
+              marginTop: 20,
+              backgroundColor: '#007AFF',
+              paddingVertical: 12,
+              paddingHorizontal: 20,
+              borderRadius: 8
+            }}
+            onPress={fetchReactions}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Retry Loading</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    if (groupedIngredients.length === 0 && ingredientReactions.length > 0) {
+      // We have ingredients but they're not grouped yet
+      console.log('Triggering grouping from render');
+      setTimeout(() => groupIngredientsByFirstLetter(), 0);
+      
+      return (
+        <View style={localStyles.loadingContainer}>
+          <ActivityIndicator size="small" color="#007AFF" />
+          <Text style={{ marginTop: 15 }}>Organizing {ingredientReactions.length} ingredients...</Text>
+        </View>
+      );
+    }
+    
+    // Normal rendering of grouped ingredients
+    return (
+      <View style={localStyles.dictionaryContainer}>
+
+        
+        <ScrollView style={localStyles.ingredientScrollView}>
+          {groupedIngredients.map(group => renderLetterGroup(group))}
+        </ScrollView>
+        {renderAlphabetSidebar()}
+      </View>
+    );
+  };
+
+  // Main render function for content based on active tab
   const renderContent = () => {
-    if (loading) {
+    if (activeTab === 'Ing') {
+      return renderIngredientsTab();
+    }
+
+    // Product tabs (All, Organic, Product)
+    const filteredProducts = getFilteredProducts();
+    const groupedProducts = groupProductsByReaction(filteredProducts);
+
+    if (loading && productReactions.length === 0) {
       return (
         <View style={localStyles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
@@ -426,7 +587,7 @@ export default function ReactionsScreen() {
       );
     }
     
-    if (error) {
+    if (error && productReactions.length === 0) {
       return (
         <View style={localStyles.errorContainer}>
           <Text style={localStyles.errorText}>{error}</Text>
@@ -440,30 +601,6 @@ export default function ReactionsScreen() {
       );
     }
 
-    // Ingredients tab
-    if (activeTab === 'Ing') {
-      if (ingredientReactions.length === 0) {
-        return (
-          <View style={localStyles.emptyContainer}>
-            <Text style={localStyles.emptyText}>No ingredient reactions found</Text>
-            <Text style={localStyles.emptySubtext}>
-              Ingredients you mark as Critic, Sensitive, or Safe will appear here
-            </Text>
-          </View>
-        );
-      }
-
-      return (
-        <View style={localStyles.dictionaryContainer}>
-          <ScrollView style={localStyles.ingredientScrollView}>
-            {groupedIngredients.map(group => renderLetterGroup(group))}
-          </ScrollView>
-          {renderAlphabetSidebar()}
-        </View>
-      );
-    }
-
-    // Product tabs (All, Organic, Product)
     return (
       <ScrollView style={styles.scrollView}>
         {/* Critic Section */}
@@ -506,7 +643,7 @@ export default function ReactionsScreen() {
           <View style={styles.reactionSection}>
             <View style={styles.reactionHeader}>
               <View style={[styles.reactionIndicator, styles.sensitivIndicator]} />
-              <Text style={styles.reactionType}>Sensitiv</Text>
+              <Text style={styles.reactionType}>Sensitive</Text>
             </View>
             
             {groupedProducts.Sensitive.map((product) => (
