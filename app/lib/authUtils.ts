@@ -1,34 +1,40 @@
-// app/utils/authUtils.ts
+// app/lib/authUtils.ts - JWT removed, using AsyncStorage
 import * as SecureStore from 'expo-secure-store';
 
-const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'current_user';
 
-export const saveToken = async (token: string) => {
+export const saveUser = async (userData: any) => {
   try {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
   } catch (error) {
-    console.error('Error saving token:', error);
+    console.error('Error saving user data:', error);
   }
 };
 
-export const getToken = async () => {
+export const getUser = async () => {
   try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    const userData = await SecureStore.getItemAsync(USER_KEY);
+    return userData ? JSON.parse(userData) : null;
   } catch (error) {
-    console.error('Error getting token:', error);
+    console.error('Error getting user data:', error);
     return null;
   }
 };
 
-export const removeToken = async () => {
+export const removeUser = async () => {
   try {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
   } catch (error) {
-    console.error('Error removing token:', error);
+    console.error('Error removing user data:', error);
   }
 };
 
-export const getAuthHeader = async (): Promise<Record<string, string>> => {
-  const token = await getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export const getUserId = async (): Promise<string | null> => {
+  try {
+    const userData = await getUser();
+    return userData?.userID || null;
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
+  }
 };

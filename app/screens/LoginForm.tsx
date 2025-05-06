@@ -13,7 +13,7 @@ import { useToast } from '../utils/ToastContext';
 import { User } from "../components/Login/User";
 import { styles } from "../styles/LoginFormStyles";
 import { ApiService } from "../services/api";
-import { saveToken } from "../lib/authUtils";
+import { saveUser } from "../lib/authUtils";
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -61,8 +61,9 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           googleId: decodedToken.sub
         });
         
-        if (loginResponse.token) {
-          await saveToken(loginResponse.token);
+        if (loginResponse.user) {
+          // Save user data in SecureStore
+          await saveUser(loginResponse.user);
           onLogin(loginResponse.user);
           showToast('Signed in with Google', 'success');
         }
@@ -85,9 +86,9 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
     try {
       const response = await ApiService.login(loginEmail, loginPassword);
       
-      // Guardar el token
-      if (response.token) {
-        await saveToken(response.token);
+      // Save user data in SecureStore
+      if (response.user) {
+        await saveUser(response.user);
       }
       
       onLogin(response.user);
@@ -111,7 +112,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
 
   return (
     <View style={styles.formContainer}>
-            <View style={styles.logoContainer}>
+      <View style={styles.logoContainer}>
         <Image 
           source={require('../../assets/images/icon.png')}
           style={styles.logo}

@@ -1,17 +1,17 @@
-// app/services/api.ts
-import { getToken } from '../lib/authUtils';
+// app/services/api.ts - JWT removed
+import { getUserId } from '../lib/authUtils';
 
 const API_URL = "https://bhu8vgy7nht5.vercel.app/";
 
 export class ApiService {
   static async fetch(endpoint: string, options: RequestInit = {}) {
-    const token = await getToken();
+    const userId = await getUserId();
     
     const config: RequestInit = {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(userId ? { 'User-ID': userId } : {}),
         ...options.headers,
       },
     };
@@ -20,7 +20,7 @@ export class ApiService {
       const response = await fetch(`${API_URL}${endpoint}`, config);
       
       if (response.status === 401) {
-        // Token expired or invalid
+        // Session expired or invalid
         throw new Error('Session expired');
       }
       
@@ -126,36 +126,28 @@ export class ApiService {
     });
   }
 
-static async startTest(productID: string) {
-  return this.fetch('/tests', {
-    method: 'POST',
-    body: JSON.stringify({ itemID: productID }),
-  });
-}
+  static async startTest(productID: string) {
+    return this.fetch('/tests', {
+      method: 'POST',
+      body: JSON.stringify({ itemID: productID }),
+    });
+  }
 
-static async updateProductNote(noteId: string, note: string, rating?: number) {
-  return this.fetch(`/productnotes/${noteId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ note, rating }),
-  });
-}
+  static async updateProductNote(noteId: string, note: string, rating?: number) {
+    return this.fetch(`/productnotes/${noteId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ note, rating }),
+    });
+  }
 
-static async getTests() {
-  return this.fetch('/tests');
-}
+  static async getTests() {
+    return this.fetch('/tests');
+  }
 
-static async completeTest(testId: string, result: 'Critic' | 'Sensitive' | 'Safe' | null) {
-  return this.fetch(`/tests/${testId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ result }),
-  });
-}
-
-
-
-
-
-
-
-
+  static async completeTest(testId: string, result: 'Critic' | 'Sensitive' | 'Safe' | null) {
+    return this.fetch(`/tests/${testId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ result }),
+    });
+  }
 }

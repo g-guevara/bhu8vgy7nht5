@@ -3,14 +3,14 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+// Removed JWT import
 
 const app = express();
 // Configuración detallada de CORS
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'User-ID'],  // Changed from Authorization to User-ID
   credentials: true
 }));
 
@@ -97,24 +97,32 @@ const ProductNote = mongoose.model("ProductNote", ProductNoteSchema, "productnot
 const Wishlist = mongoose.model("Wishlist", WishlistSchema, "wishlist");
 const Test = mongoose.model("Test", TestSchema, "tests");
 
+// Simple ID-based Authentication Middleware
+const authenticateUser = async (req, res, next) => {
+  const userId = req.headers['user-id'];
 
-
-// MIDDLEWARE DE AUTENTICACIÓN JWT
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: "Token de autenticación requerido" });
+  if (!userId) {
+    return res.status(401).json({ error: "Authentication required" });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: "Token inválido o expirado" });
+  try {
+    // Check if user exists
+    const user = await User.findOne({ userID: userId });
+    if (!user) {
+      return res.status(403).json({ error: "Invalid user ID" });
     }
-    req.user = user;
+    
+    // Attach user information to the request
+    req.user = {
+      userID: user.userID,
+      email: user.email,
+      name: user.name
+    };
+    
     next();
-  });
+  } catch (error) {
+    return res.status(500).json({ error: "Authentication error" });
+  }
 };
 
 // RUTAS
@@ -134,7 +142,7 @@ app.post("/test", (req, res) => {
 });
 
 // Rutas de Usuarios
-app.get("/users", authenticateToken, async (req, res) => {
+app.get("/users", authenticateUser, async (req, res) => {
   try {
     const users = await User.find().select('-password'); // Excluir contraseñas
     res.json(users);
@@ -178,7 +186,7 @@ app.post("/users", async (req, res) => {
   }
 });
 
-// Login de usuario con JWT
+// Login de usuario - returns user data instead of token
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -195,24 +203,12 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
     
-    // Crear token JWT
-    const token = jwt.sign(
-      { 
-        userID: user.userID,
-        email: user.email,
-        name: user.name 
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' } // Token válido por 7 días
-    );
-    
     // Remover contraseña de la respuesta
     const userResponse = user.toObject();
     delete userResponse.password;
     
     res.json({ 
-      user: userResponse,
-      token: token
+      user: userResponse
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -246,24 +242,12 @@ app.post("/google-login", async (req, res) => {
       await user.save();
     }
     
-    // Crear token JWT
-    const token = jwt.sign(
-      { 
-        userID: user.userID,
-        email: user.email,
-        name: user.name 
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
     // Remover contraseña de la respuesta
     const userResponse = user.toObject();
     delete userResponse.password;
     
     res.json({ 
-      user: userResponse,
-      token: token
+      user: userResponse
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -271,7 +255,7 @@ app.post("/google-login", async (req, res) => {
 });
 
 // Rutas de Artículos (protegidas)
-app.get("/articles", authenticateToken, async (req, res) => {
+app.get("/articles", authenticateUser, async (req, res) => {
   try {
     const articles = await Article.find();
     res.json(articles);
@@ -280,7 +264,7 @@ app.get("/articles", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/articles", authenticateToken, async (req, res) => {
+app.post("/articles", authenticateUser, async (req, res) => {
   try {
     const article = new Article(req.body);
     await article.save();
@@ -291,7 +275,7 @@ app.post("/articles", authenticateToken, async (req, res) => {
 });
 
 // Rutas de Historia (protegidas)
-app.get("/history", authenticateToken, async (req, res) => {
+app.get("/history", authenticateUser, async (req, res) => {
   try {
     const history = await History.find({ userID: req.user.userID });
     res.json(history);
@@ -300,7 +284,7 @@ app.get("/history", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/history", authenticateToken, async (req, res) => {
+app.post("/history", authenticateUser, async (req, res) => {
   try {
     const history = new History({
       ...req.body,
@@ -314,7 +298,7 @@ app.post("/history", authenticateToken, async (req, res) => {
 });
 
 // Rutas de Ingredientes (protegidas)
-app.get("/productingredients", authenticateToken, async (req, res) => {
+app.get("/productingredients", authenticateUser, async (req, res) => {
   try {
     const ingredients = await ProductIngredient.find();
     res.json(ingredients);
@@ -323,7 +307,7 @@ app.get("/productingredients", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/productingredients", authenticateToken, async (req, res) => {
+app.post("/productingredients", authenticateUser, async (req, res) => {
   try {
     const ingredient = new ProductIngredient(req.body);
     await ingredient.save();
@@ -334,7 +318,7 @@ app.post("/productingredients", authenticateToken, async (req, res) => {
 });
 
 // Rutas de Notas de Producto (protegidas)
-app.get("/productnotes", authenticateToken, async (req, res) => {
+app.get("/productnotes", authenticateUser, async (req, res) => {
   try {
     const notes = await ProductNote.find({ userID: req.user.userID });
     res.json(notes);
@@ -343,7 +327,7 @@ app.get("/productnotes", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/productnotes", authenticateToken, async (req, res) => {
+app.post("/productnotes", authenticateUser, async (req, res) => {
   try {
     const note = new ProductNote({
       ...req.body,
@@ -357,7 +341,7 @@ app.post("/productnotes", authenticateToken, async (req, res) => {
 });
 
 // Rutas de Wishlist (protegidas)
-app.get("/wishlist", authenticateToken, async (req, res) => {
+app.get("/wishlist", authenticateUser, async (req, res) => {
   try {
     const wishlist = await Wishlist.find({ userID: req.user.userID });
     res.json(wishlist);
@@ -366,7 +350,7 @@ app.get("/wishlist", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/wishlist", authenticateToken, async (req, res) => {
+app.post("/wishlist", authenticateUser, async (req, res) => {
   try {
     const item = new Wishlist({
       ...req.body,
@@ -379,11 +363,8 @@ app.post("/wishlist", authenticateToken, async (req, res) => {
   }
 });
 
-
-
-
 // Change password endpoint
-app.post("/change-password", authenticateToken, async (req, res) => {
+app.post("/change-password", authenticateUser, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     
@@ -413,7 +394,7 @@ app.post("/change-password", authenticateToken, async (req, res) => {
 });
 
 // Update trial period endpoint
-app.post("/update-trial-period", authenticateToken, async (req, res) => {
+app.post("/update-trial-period", authenticateUser, async (req, res) => {
   try {
     const { trialDays } = req.body;
     
@@ -441,7 +422,7 @@ app.post("/update-trial-period", authenticateToken, async (req, res) => {
 });
 
 // Get user profile endpoint
-app.get("/profile", authenticateToken, async (req, res) => {
+app.get("/profile", authenticateUser, async (req, res) => {
   try {
     const user = await User.findOne({ userID: req.user.userID }).select('-password');
     if (!user) {
@@ -453,8 +434,9 @@ app.get("/profile", authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 // DELETE wishlist item endpoint
-app.delete("/wishlist/:id", authenticateToken, async (req, res) => {
+app.delete("/wishlist/:id", authenticateUser, async (req, res) => {
   try {
     const wishlistItemId = req.params.id;
     
@@ -480,10 +462,8 @@ app.delete("/wishlist/:id", authenticateToken, async (req, res) => {
   }
 });
 
-
-
 // Get user's active tests
-app.get("/tests", authenticateToken, async (req, res) => {
+app.get("/tests", authenticateUser, async (req, res) => {
   try {
     const tests = await Test.find({ userID: req.user.userID });
     res.json(tests);
@@ -493,7 +473,7 @@ app.get("/tests", authenticateToken, async (req, res) => {
 });
 
 // Start a new test
-app.post("/tests", authenticateToken, async (req, res) => {
+app.post("/tests", authenticateUser, async (req, res) => {
   try {
     const { itemID } = req.body;
     
@@ -533,7 +513,7 @@ app.post("/tests", authenticateToken, async (req, res) => {
 });
 
 // Complete a test
-app.put("/tests/:id", authenticateToken, async (req, res) => {
+app.put("/tests/:id", authenticateUser, async (req, res) => {
   try {
     const testId = req.params.id;
     const { result } = req.body;
@@ -559,11 +539,8 @@ app.put("/tests/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// Add this to your server.js file
-// Version: 1.0.0
-
 // Update an existing product note
-app.put("/productnotes/:id", authenticateToken, async (req, res) => {
+app.put("/productnotes/:id", authenticateUser, async (req, res) => {
   try {
     const noteId = req.params.id;
     const { note, rating } = req.body;
@@ -591,35 +568,8 @@ app.put("/productnotes/:id", authenticateToken, async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Verificar token (ruta de utilidad)
-app.get("/verify-token", authenticateToken, (req, res) => {
+// Verify user (ruta de utilidad)
+app.get("/verify-token", authenticateUser, (req, res) => {
   res.json({ valid: true, user: req.user });
 });
 
