@@ -812,7 +812,7 @@ app.post("/emergency-user", async (req, res) => {
 
 
 
-// Middleware para asegurar que todas las respuestas sean JSON
+// Middleware para asegurar que todas las res
 app.use((req, res, next) => {
   const originalSend = res.send;
   res.send = function(body) {
