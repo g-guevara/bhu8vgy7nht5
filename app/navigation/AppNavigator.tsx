@@ -1,4 +1,5 @@
 // app/navigation/AppNavigator.tsx
+//test
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
