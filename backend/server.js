@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 // Removed JWT import
-
+// FUNCIÓN SERVERLESS
 // Connection pooling implementation
 let cachedDb = null;
 
@@ -868,29 +868,6 @@ app.get("/ingredient-reactions", authenticateUser, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // IMPORTANTE: Bypasss de autenticación para emergencias
 // DESCOMENTAR SOLO SI NECESITAS UN ACCESO DE EMERGENCIA

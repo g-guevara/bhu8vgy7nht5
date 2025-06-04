@@ -46,16 +46,7 @@ export default function WishlistScreen() {
   const getDefaultEmoji = (product: Product): string => {
     const name = (product.product_name || '').toLowerCase();
     const ingredients = (product.ingredients_text || '').toLowerCase();
-
-    if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
-    if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
-    if (name.includes('milk') || name.includes('dairy')) return '🥛';
-    if (name.includes('fruit') || name.includes('apple') || name.includes('banana')) return '🍎';
-    if (name.includes('vegetable') || name.includes('carrot')) return '🥦';
-    if (name.includes('fish') || name.includes('tuna')) return '🐟';
-    if (name.includes('meat') || name.includes('beef')) return '🥩';
-
-    return '🍽️';
+    return '';
   };
 
   // Fetch wishlist data
