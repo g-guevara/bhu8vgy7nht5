@@ -3,7 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-// Removed JWT import
+
 // FUNCIÓN SERVERLESS
 // Connection pooling implementation
 let cachedDb = null;
@@ -216,13 +216,6 @@ const authenticateUser = async (req, res, next) => {
       name: user.name
     };
     
-    // Comprobar que las colecciones existan para este usuario
-    const testForUser = await Test.findOne({ userID: user.userID });
-    const wishlistForUser = await Wishlist.findOne({ userID: user.userID });
-    
-    console.log('Test para usuario:', testForUser ? 'Existe' : 'No existe');
-    console.log('Wishlist para usuario:', wishlistForUser ? 'Existe' : 'No existe');
-    
     console.log('=========== FIN AUTENTICACIÓN ===========');
     next();
   } catch (error) {
@@ -278,7 +271,7 @@ app.get("/users", authenticateUser, async (req, res) => {
   }
 });
 
-// Registro de usuario - VERSIÓN MEJORADA
+// REGISTRO DE USUARIO - VERSIÓN MEJORADA
 app.post("/users", async (req, res) => {
   try {
     const { name, email, password, language } = req.body;
@@ -358,7 +351,7 @@ app.post("/users", async (req, res) => {
   }
 });
 
-// Login de usuario - VERSIÓN MEJORADA con mensajes específicos
+// LOGIN DE USUARIO - VERSIÓN MEJORADA
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -406,22 +399,29 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Google Login
+// GOOGLE LOGIN - VERSIÓN MEJORADA
 app.post("/google-login", async (req, res) => {
   try {
     const { email, name, googleId, idToken, accessToken } = req.body;
     
+    if (!email || !name || !googleId) {
+      return res.status(400).json({ 
+        error: "MISSING_GOOGLE_DATA",
+        message: "Datos de Google incompletos"
+      });
+    }
+    
     // Verificar si el usuario ya existe
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
       // Crear nuevo usuario con Google
       user = new User({
         userID: new mongoose.Types.ObjectId().toString(),
-        name,
-        email,
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
         password: await bcrypt.hash(googleId + Date.now(), 10), // Contraseña temporal
-        language: "en",
+        language: "es",
         googleId: googleId,
         authProvider: 'google'
       });
@@ -438,10 +438,15 @@ app.post("/google-login", async (req, res) => {
     delete userResponse.password;
     
     res.json({ 
+      message: "Login con Google exitoso",
       user: userResponse
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error en Google login:", error);
+    res.status(500).json({ 
+      error: "GOOGLE_LOGIN_ERROR",
+      message: "Error al iniciar sesión con Google. Intenta más tarde."
+    });
   }
 });
 
@@ -865,22 +870,29 @@ app.delete("/ingredient-reactions/:ingredientName", authenticateUser, async (req
   }
 });
 
+// Get ingredient reactions
+app.get("/ingredient-reactions", authenticateUser, async (req, res) => {
+  console.log("[DEBUG] Received request for /ingredient-reactions");
+  console.log("[DEBUG] User ID:", req.user.userID);
+  
+  try {
+    // Find all ingredient reactions for this user
+    const reactions = await IngredientReaction.find({ userID: req.user.userID });
+    console.log("[DEBUG] Found ingredient reactions:", reactions.length);
+    
+    // Ensure we're sending JSON content type
+    res.setHeader('Content-Type', 'application/json');
+    res.json(reactions);
+  } catch (error) {
+    console.error("[ERROR] Failed to fetch ingredient reactions:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Verify user (ruta de utilidad)
 app.get("/verify-token", authenticateUser, (req, res) => {
   res.json({ valid: true, user: req.user });
 });
-
-// Middleware de manejo de errores global
-app.use((err, req, res, next) => {
-  console.error("Error en el servidor:", err);
-  res.status(500).json({ 
-    error: "Error interno del servidor",
-    message: err.message 
-  });
-});
-
-
-
 
 app.get("/diagnostico", async (req, res) => {
   try {
@@ -914,56 +926,43 @@ app.get("/diagnostico", async (req, res) => {
   }
 });
 
-
-app.get("/ingredient-reactions", authenticateUser, async (req, res) => {
-  console.log("[DEBUG] Received request for /ingredient-reactions");
-  console.log("[DEBUG] User ID:", req.user.userID);
+// MIDDLEWARE DE MANEJO DE ERRORES GLOBAL - MEJORADO
+app.use((err, req, res, next) => {
+  console.error("Error en el servidor:", err);
   
-  try {
-    // Find all ingredient reactions for this user
-    const reactions = await IngredientReaction.find({ userID: req.user.userID });
-    console.log("[DEBUG] Found ingredient reactions:", reactions.length);
-    
-    // Ensure we're sending JSON content type
-    res.setHeader('Content-Type', 'application/json');
-    res.json(reactions);
-  } catch (error) {
-    console.error("[ERROR] Failed to fetch ingredient reactions:", error);
-    res.status(500).json({ error: error.message });
+  // Error de validación de Mongoose
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      error: "VALIDATION_ERROR",
+      message: "Los datos proporcionados no son válidos",
+      details: Object.values(err.errors).map(e => e.message)
+    });
   }
+  
+  // Error de duplicado en MongoDB
+  if (err.code === 11000) {
+    return res.status(409).json({
+      error: "DUPLICATE_ENTRY",
+      message: "Ya existe un registro con estos datos"
+    });
+  }
+  
+  // Error de conexión a la base de datos
+  if (err.name === 'MongoError' || err.name === 'MongooseError') {
+    return res.status(503).json({
+      error: "DATABASE_ERROR",
+      message: "Problema temporal con la base de datos. Intenta más tarde."
+    });
+  }
+  
+  // Error genérico
+  res.status(500).json({ 
+    error: "INTERNAL_SERVER_ERROR",
+    message: "Error interno del servidor. Por favor, intenta más tarde."
+  });
 });
 
-// IMPORTANTE: Bypasss de autenticación para emergencias
-// DESCOMENTAR SOLO SI NECESITAS UN ACCESO DE EMERGENCIA
-/*
-// Endpoint para crear un usuario de emergencia sin autenticación
-app.post("/emergency-user", async (req, res) => {
-  try {
-    const emergencyUser = new User({
-      userID: "emergency-" + Date.now(),
-      name: "Usuario Emergencia",
-      email: "emergencia@example.com",
-      password: await bcrypt.hash("password-temporal", 10),
-      language: "es"
-    });
-    
-    await emergencyUser.save();
-    
-    const userResponse = emergencyUser.toObject();
-    delete userResponse.password;
-    
-    res.status(201).json({
-      message: "Usuario de emergencia creado correctamente",
-      user: userResponse
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-*/
-
-
-// Middleware para asegurar que todas las res
+// Middleware para asegurar que todas las respuestas sean JSON
 app.use((req, res, next) => {
   const originalSend = res.send;
   res.send = function(body) {
@@ -984,5 +983,6 @@ if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5001;
   app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log("✅ Mejoras de manejo de errores aplicadas");
   });
 }
