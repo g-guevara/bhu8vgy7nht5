@@ -278,15 +278,43 @@ app.get("/users", authenticateUser, async (req, res) => {
   }
 });
 
-// Registro de usuario
+// Registro de usuario - VERSIÓN MEJORADA
 app.post("/users", async (req, res) => {
   try {
     const { name, email, password, language } = req.body;
     
-    // Verificar si el usuario ya existe
-    const existingUser = await User.findOne({ email });
+    // Validaciones de entrada
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        error: "MISSING_REQUIRED_FIELDS",
+        message: "Todos los campos son requeridos"
+      });
+    }
+    
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: "INVALID_EMAIL_FORMAT",
+        message: "El formato del email no es válido"
+      });
+    }
+    
+    // Validar longitud de contraseña
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        error: "PASSWORD_TOO_SHORT",
+        message: "La contraseña debe tener al menos 8 caracteres"
+      });
+    }
+    
+    // Verificar si el usuario ya existe - MENSAJE ESPECÍFICO
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      return res.status(400).json({ error: "El email ya está registrado" });
+      return res.status(409).json({ 
+        error: "EMAIL_ALREADY_EXISTS",
+        message: "Este email ya está registrado. ¿Ya tienes una cuenta?"
+      });
     }
     
     // Hash de la contraseña
@@ -295,10 +323,10 @@ app.post("/users", async (req, res) => {
     // Crear usuario
     const user = new User({
       userID: new mongoose.Types.ObjectId().toString(),
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
-      language: language || "en"
+      language: language || "es"
     });
     
     await user.save();
@@ -307,27 +335,58 @@ app.post("/users", async (req, res) => {
     const userResponse = user.toObject();
     delete userResponse.password;
     
-    res.status(201).json(userResponse);
+    res.status(201).json({
+      message: "Usuario registrado exitosamente",
+      user: userResponse
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error en registro:", error);
+    
+    // Manejo específico de errores de MongoDB
+    if (error.code === 11000) {
+      return res.status(409).json({ 
+        error: "EMAIL_ALREADY_EXISTS",
+        message: "Este email ya está registrado. ¿Ya tienes una cuenta?"
+      });
+    }
+    
+    // Error genérico del servidor
+    res.status(500).json({ 
+      error: "INTERNAL_SERVER_ERROR",
+      message: "Error interno del servidor. Por favor, intenta más tarde."
+    });
   }
 });
 
-// Login de usuario - returns user data instead of token
+// Login de usuario - VERSIÓN MEJORADA con mensajes específicos
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Buscar usuario
-    const user = await User.findOne({ email });
+    // Validaciones de entrada
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: "MISSING_CREDENTIALS",
+        message: "Email y contraseña son requeridos"
+      });
+    }
+    
+    // Buscar usuario (case insensitive)
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res.status(401).json({ error: "Credenciales inválidas" });
+      return res.status(401).json({ 
+        error: "INVALID_CREDENTIALS",
+        message: "Email o contraseña incorrectos"
+      });
     }
     
     // Verificar contraseña
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({ error: "Credenciales inválidas" });
+      return res.status(401).json({ 
+        error: "INVALID_CREDENTIALS",
+        message: "Email o contraseña incorrectos"
+      });
     }
     
     // Remover contraseña de la respuesta
@@ -335,10 +394,15 @@ app.post("/login", async (req, res) => {
     delete userResponse.password;
     
     res.json({ 
+      message: "Login exitoso",
       user: userResponse
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error en login:", error);
+    res.status(500).json({ 
+      error: "INTERNAL_SERVER_ERROR",
+      message: "Error interno del servidor. Por favor, intenta más tarde."
+    });
   }
 });
 
