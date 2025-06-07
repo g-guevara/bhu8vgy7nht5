@@ -913,7 +913,7 @@ app.use((req, res, next) => {
 });
 
 // Exportar para Vercel
-module.exports = app; 
+module.exports = app;
 
 // Iniciar servidor si no está en Vercel
 if (process.env.NODE_ENV !== "production") {
