@@ -23,7 +23,7 @@ const DB_CONFIGS = {
   // Base de datos de productos (OpenFoodFacts)
   products: {
     uri: "mongodb+srv://frituMA3wuxUBrLXl1re:11lBr2phenuwrebopher@cluster0.sz3esol.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    dbName: "test", // Ajusta según el nombre real de tu DB
+    dbName: "mi_database", // Ajusta según el nombre real de tu DB
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
