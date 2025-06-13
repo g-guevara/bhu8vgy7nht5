@@ -1,36 +1,18 @@
+// backend/server.js - Actualizado para múltiples bases de datos
 require("dotenv").config();
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const routes = require("./routes");
-
-// Connection pooling implementation
-let cachedDb = null;
-
-async function connectToDatabase() {
-  if (cachedDb && mongoose.connection.readyState === 1) {
-    return cachedDb;
-  }
-
-  // Connection options optimized for serverless
-  const options = {
-    dbName: "sensitivv",
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    maxPoolSize: 10, // Adjust based on your needs
-    serverSelectionTimeoutMS: 30000, // 30 seconds
-    socketTimeoutMS: 45000, // 45 seconds
-  };
-
-  // Connect to the database
-  const client = await mongoose.connect(process.env.MONGODB_URI, options);
-  console.log("Connected to MongoDB");
-  
-  cachedDb = client;
-  return client;
-}
+const { 
+  initializeConnections, 
+  getConnectionStatus,
+  setupConnectionHandlers 
+} = require('./mongoConnections');
+const { initializeModels } = require('./models');
 
 const app = express();
+
+// =================== MIDDLEWARE ===================
 
 // Configuración detallada de CORS
 app.use(cors({
@@ -43,70 +25,169 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Connection status check middleware
+// =================== INICIALIZACIÓN DE BASES DE DATOS ===================
+
+let dbInitialized = false;
+
+/**
+ * Inicializa todas las conexiones y modelos
+ */
+async function initializeDatabases() {
+  if (dbInitialized) {
+    return true;
+  }
+
+  try {
+    console.log("🚀 Inicializando conexiones a las bases de datos...");
+    
+    // 1. Conectar a ambas bases de datos
+    await initializeConnections();
+    
+    // 2. Configurar handlers de eventos
+    setupConnectionHandlers();
+    
+    // 3. Inicializar modelos
+    await initializeModels();
+    
+    dbInitialized = true;
+    console.log("✅ Todas las bases de datos y modelos inicializados correctamente");
+    
+    return true;
+  } catch (error) {
+    console.error("💥 Error inicializando bases de datos:", error);
+    throw error;
+  }
+}
+
+// =================== MIDDLEWARE DE VERIFICACIÓN DE CONEXIÓN ===================
+
 app.use(async (req, res, next) => {
-  // Skip connection check for non-DB routes
+  // Skip database check for health and root routes
   if (req.path === '/' || req.path === '/health') {
     return next();
   }
   
   try {
-    // Check if we're connected, reconnect if needed
-    if (mongoose.connection.readyState !== 1) {
-      console.log("MongoDB not connected, reconnecting...");
-      await connectToDatabase();
+    // Initialize databases if not already done
+    if (!dbInitialized) {
+      console.log("🔄 Inicializando bases de datos en middleware...");
+      await initializeDatabases();
     }
+    
+    // Check connection status
+    const status = getConnectionStatus();
+    
+    // Verificar que al menos una conexión esté activa
+    const mainConnected = status.main.status === 'connected';
+    const productsConnected = status.products.status === 'connected';
+    
+    // Para rutas de productos, necesitamos la DB de productos
+    if (req.path.includes('/products') && !productsConnected) {
+      console.error("❌ DB de productos no conectada para ruta:", req.path);
+      return res.status(503).json({ 
+        error: "Products database unavailable",
+        message: "La base de datos de productos no está disponible temporalmente"
+      });
+    }
+    
+    // Para otras rutas, necesitamos la DB principal
+    if (!req.path.includes('/products') && !mainConnected) {
+      console.error("❌ DB principal no conectada para ruta:", req.path);
+      return res.status(503).json({ 
+        error: "Main database unavailable",
+        message: "La base de datos principal no está disponible temporalmente"
+      });
+    }
+    
     next();
   } catch (error) {
-    console.error("Database connection error in middleware:", error);
-    return res.status(500).json({ error: "Database connection error" });
+    console.error("💥 Error en middleware de DB:", error);
+    return res.status(500).json({ 
+      error: "Database initialization error",
+      message: "Error al conectar con las bases de datos"
+    });
   }
 });
 
-// Initialize database connection
-connectToDatabase()
-  .then(() => console.log("Database connection ready"))
-  .catch(err => console.error("MongoDB connection error:", err));
+// =================== RUTAS DE SALUD Y DIAGNÓSTICO ===================
 
-// Connection error handling
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected, attempting to reconnect...');
-  connectToDatabase();
-});
-
-// Health check endpoint
+// Health check mejorado
 app.get("/health", (req, res) => {
-  const dbState = mongoose.connection.readyState;
-  const dbStateMap = {
-    0: "disconnected",
-    1: "connected",
-    2: "connecting",
-    3: "disconnecting"
-  };
+  const status = getConnectionStatus();
   
   res.json({
     status: "ok",
-    dbState: dbStateMap[dbState] || "unknown",
+    timestamp: new Date(),
     uptime: process.uptime(),
-    timestamp: new Date()
+    databases: status,
+    dbInitialized: dbInitialized
   });
+});
+
+// Ruta de diagnóstico extendida
+app.get("/diagnostico", async (req, res) => {
+  try {
+    const status = getConnectionStatus();
+    const { getModels } = require('./models');
+    
+    let counts = {};
+    let error = null;
+    
+    try {
+      // Solo intentar contar si las DBs están conectadas
+      const models = await getModels();
+      
+      if (status.main.status === 'connected') {
+        counts.usuarios = await models.User.countDocuments();
+        counts.tests = await models.Test.countDocuments();
+        counts.wishlists = await models.Wishlist.countDocuments();
+      }
+      
+      if (status.products.status === 'connected') {
+        counts.productos = await models.Product.countDocuments();
+      }
+    } catch (countError) {
+      error = countError.message;
+      console.error("Error contando documentos:", countError);
+    }
+    
+    res.json({
+      servidor: {
+        tiempo: new Date().toISOString(),
+        uptime: process.uptime(),
+        nodeVersion: process.version,
+        dbInitialized
+      },
+      basesdatos: status,
+      contadores: counts,
+      error: error
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: "Error en diagnóstico",
+      message: error.message 
+    });
+  }
 });
 
 // Ruta de prueba
 app.get("/", (req, res) => {
-  res.json({ message: "Servidor funcionando correctamente 🚀" });
+  res.json({ 
+    message: "🚀 Servidor con múltiples bases de datos funcionando correctamente",
+    timestamp: new Date(),
+    databases: getConnectionStatus()
+  });
 });
+
+// =================== RUTAS PRINCIPALES ===================
 
 // Use routes
 app.use(routes);
 
-// MIDDLEWARE DE MANEJO DE ERRORES GLOBAL - MEJORADO
+// =================== MANEJO DE ERRORES ===================
+
 app.use((err, req, res, next) => {
-  console.error("Error en el servidor:", err);
+  console.error("💥 Error en el servidor:", err);
   
   // Error de validación de Mongoose
   if (err.name === 'ValidationError') {
@@ -153,6 +234,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// =================== INICIALIZACIÓN DEL SERVIDOR ===================
+
+// Inicializar bases de datos al arrancar
+initializeDatabases()
+  .then(() => {
+    console.log("🎉 Servidor listo para recibir peticiones");
+  })
+  .catch(error => {
+    console.error("💥 Error fatal inicializando el servidor:", error);
+    process.exit(1);
+  });
+
 // Exportar para Vercel
 module.exports = app;
 
@@ -160,7 +253,9 @@ module.exports = app;
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5001;
   app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    console.log("✅ Mejoras de manejo de errores aplicadas");
+    console.log(`🌐 Servidor corriendo en http://localhost:${PORT}`);
+    console.log("📊 Sistema de múltiples bases de datos activo");
+    console.log("🔗 Base datos principal: Usuarios, tests, etc.");
+    console.log("🛒 Base datos productos: OpenFoodFacts data");
   });
 }

@@ -1,11 +1,36 @@
-// app/services/api.ts - Versión corregida con manejo de errores mejorado
+// app/services/api.ts - Actualizado con endpoints de productos MongoDB
 import { getUserId } from '../lib/authUtils';
 import { getUserFriendlyError } from '../utils/securityConfig';
 
 const API_URL = "https://bhu8vgy7nht5.vercel.app/";
-const DEBUG = true; // Cambiar a false en producción
+const DEBUG = true;
 
-// Clase de error personalizada para incluir información de respuesta
+// Interfaces para productos
+export interface Product {
+  code: string;
+  product_name: string;
+  brands: string;
+  ingredients_text: string;
+}
+
+export interface ProductSearchResponse {
+  products: Product[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface ProductStats {
+  total: number;
+  organic: number;
+  withIngredients: number;
+  regular: number;
+}
+
+// Clase de error personalizada
 class APIError extends Error {
   public status: number;
   public statusText: string;
@@ -52,11 +77,9 @@ export class ApiService {
         console.log(`[API] Response status: ${response.status} ${response.statusText}`);
       }
       
-      // Check content type before attempting to parse JSON
       const contentType = response.headers.get('content-type');
       if (contentType && !contentType.includes('application/json')) {
         console.error(`[API] Server returned non-JSON content type: ${contentType}`);
-        // Try to get text for debugging purposes
         const text = await response.text();
         console.error(`[API] Response starts with: ${text.substring(0, 100)}`);
         throw new APIError(
@@ -67,7 +90,6 @@ export class ApiService {
         );
       }
       
-      // Parse response JSON
       let responseData;
       try {
         responseData = await response.json();
@@ -82,7 +104,6 @@ export class ApiService {
         );
       }
       
-      // Check if response is not ok (status not in 200-299 range)
       if (!response.ok) {
         const errorMessage = responseData?.message || responseData?.error || response.statusText || 'Request failed';
         
@@ -90,7 +111,6 @@ export class ApiService {
           console.log(`[API] Error response data:`, responseData);
         }
         
-        // Create error with status information
         throw new APIError(
           errorMessage,
           response.status,
@@ -101,7 +121,6 @@ export class ApiService {
       
       return responseData;
     } catch (error: unknown) {
-      // If it's already our APIError, re-throw it
       if (error instanceof APIError) {
         if (DEBUG) {
           console.log('[API] APIError thrown:', {
@@ -113,42 +132,91 @@ export class ApiService {
         throw error;
       }
       
-      // Handle network errors and other fetch errors
       console.error('API Network Error:', error);
-      
-      // Get error message safely
       const errorMessage = error instanceof Error ? error.message : 'Network request failed';
       
-      // Create a network error with special status
       throw new APIError(
         errorMessage,
-        0, // Use 0 for network errors
+        0,
         'Network Error',
         { originalError: errorMessage }
       );
     }
   }
 
-  // Función de diagnóstico para identificar problemas
+  // =================== MÉTODOS DE PRODUCTOS (NUEVOS) ===================
+
+  /**
+   * Buscar productos por término de búsqueda
+   */
+  static async searchProducts(query: string, page: number = 1, limit: number = 15): Promise<ProductSearchResponse> {
+    const params = new URLSearchParams({
+      q: query,
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    
+    return this.fetch(`products/search?${params}`);
+  }
+
+  /**
+   * Obtener producto por código
+   */
+  static async getProductByCode(code: string): Promise<Product> {
+    return this.fetch(`products/${encodeURIComponent(code)}`);
+  }
+
+  /**
+   * Obtener productos por categoría/marca
+   */
+  static async getProductsByCategory(brand: string, organic: boolean = false): Promise<Product[]> {
+    const params = new URLSearchParams();
+    if (organic) {
+      params.append('organic', 'true');
+    }
+    
+    const queryString = params.toString();
+    const endpoint = `products/category/${encodeURIComponent(brand)}${queryString ? `?${queryString}` : ''}`;
+    
+    return this.fetch(endpoint);
+  }
+
+  /**
+   * Obtener estadísticas de productos
+   */
+  static async getProductStats(): Promise<ProductStats> {
+    return this.fetch('products/stats');
+  }
+
+  /**
+   * Obtener productos sin término de búsqueda (para mostrar todos)
+   */
+  static async getAllProducts(page: number = 1, limit: number = 15): Promise<ProductSearchResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    
+    return this.fetch(`products/search?${params}`);
+  }
+
+  // =================== MÉTODOS EXISTENTES ===================
+
   static async diagnosticarProblemas() {
     console.log('============ DIAGNÓSTICO DE API ============');
     try {
-      // 1. Verificar conexión básica
       console.log('Verificando conexión al servidor...');
       const conexion = await fetch(API_URL);
       console.log(`Conexión: ${conexion.status} ${conexion.statusText}`);
       
-      // 2. Verificar datos de usuario
       console.log('Verificando ID de usuario...');
       const userId = await getUserId();
       console.log(`User ID: ${userId || 'No encontrado'}`);
       
-      // 3. Probar endpoint público
       console.log('Probando endpoint público...');
       const respuestaPublica = await fetch(`${API_URL}/`);
       console.log(`Respuesta: ${respuestaPublica.status} ${respuestaPublica.statusText}`);
       
-      // 4. Probar endpoint protegido con User-ID
       if (userId) {
         console.log('Probando endpoint protegido con User-ID...');
         const respuestaProtegida = await fetch(`${API_URL}/verify-token`, {
@@ -160,6 +228,11 @@ export class ApiService {
       } else {
         console.log('No se puede probar endpoint protegido porque no hay User-ID');
       }
+      
+      // Probar endpoint de productos
+      console.log('Probando endpoint de productos...');
+      const respuestaProductos = await fetch(`${API_URL}products/stats`);
+      console.log(`Productos: ${respuestaProductos.status} ${respuestaProductos.statusText}`);
       
       console.log('============ FIN DIAGNÓSTICO ============');
     } catch (error: unknown) {
@@ -173,9 +246,7 @@ export class ApiService {
       body: JSON.stringify({ email, password }),
     });
     
-    // Si el login es exitoso, verificar que user y userID existan
     if (result.user) {
-      // Asegurarse de que userID existe (algunas veces puede estar como _id)
       if (!result.user.userID && result.user._id) {
         console.log('Transformando _id a userID:', result.user._id);
         result.user.userID = result.user._id;
@@ -282,7 +353,6 @@ export class ApiService {
     });
   }
 
-  // Save product reaction
   static async saveProductReaction(productID: string, reaction: string) {
     return this.fetch('/product-reactions', {
       method: 'POST',
@@ -293,19 +363,16 @@ export class ApiService {
     });
   }
 
-  // Get product reactions
   static async getProductReactions() {
     return this.fetch('/product-reactions');
   }
 
-  // Delete product reaction
   static async deleteProductReaction(productID: string) {
     return this.fetch(`/product-reactions/${productID}`, {
       method: 'DELETE',
     });
   }
 
-  // Save ingredient reaction
   static async saveIngredientReaction(ingredientName: string, reaction: string) {
     return this.fetch('/ingredient-reactions', {
       method: 'POST',
@@ -316,19 +383,16 @@ export class ApiService {
     });
   }
 
-  // Delete ingredient reaction
   static async deleteIngredientReaction(ingredientName: string) {
     return this.fetch(`/ingredient-reactions/${encodeURIComponent(ingredientName)}`, {
       method: 'DELETE',
     });
   }
 
-  // Get ingredient reactions
   static async getIngredientReactions() {
     console.log('[API] Fetching ingredient reactions...');
     
     try {
-      // Add a timestamp to prevent caching issues
       const timestamp = new Date().getTime();
       const endpoint = `/ingredient-reactions?t=${timestamp}`;
       
@@ -336,12 +400,10 @@ export class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'User-ID': await getUserId() || '',
-          // Force accept JSON only
           'Accept': 'application/json'
         }
       });
       
-      // Log the response details for debugging
       console.log(`[API] Response status: ${response.status}`);
       console.log(`[API] Response content-type: ${response.headers.get('content-type')}`);
       
@@ -356,7 +418,6 @@ export class ApiService {
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.error(`[API] Non-JSON response, content-type: ${contentType}`);
-        // Try to get first part of text for debugging
         const text = await response.text();
         console.error(`[API] Response preview: ${text.substring(0, 100)}`);
         throw new APIError(
@@ -367,7 +428,6 @@ export class ApiService {
         );
       }
       
-      // Parse as JSON at this point
       const data = await response.json();
       console.log(`[API] Successfully fetched ${data.length} ingredient reactions`);
       return data;
