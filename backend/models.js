@@ -1,4 +1,4 @@
-// backend/models.js - Versión corregida con mejor manejo de índices
+// backend/models.js - VERSIÓN SIMPLIFICADA SIN ÍNDICES DINÁMICOS
 const mongoose = require("mongoose");
 const { getMainConnection, getProductsConnection } = require('./mongoConnections');
 
@@ -81,107 +81,41 @@ const IngredientReactionSchema = new mongoose.Schema({
   reaction: { type: String, enum: ['Critic', 'Sensitive', 'Safe'], required: true }
 }, { timestamps: true });
 
-// =================== SCHEMAS DE PRODUCTOS (DB PRODUCTOS) ===================
+// =================== PRODUCT SCHEMA SIMPLIFICADO ===================
 
-// Product Schema (DB Productos) - Versión mejorada
+// Product Schema (DB Productos) - SÚPER SIMPLIFICADO
 const ProductSchema = new mongoose.Schema({
   code: { 
-    type: mongoose.Schema.Types.Mixed, // Puede ser String o Number 
-    required: true,
-    index: true 
+    type: mongoose.Schema.Types.Mixed, // String o Number
+    required: true
   },
   product_name: { 
     type: String, 
-    required: true,
-    index: true // Índice simple adicional para queries directas
+    required: true
   },
   brands: { 
     type: String, 
-    required: true,
-    index: true // Índice simple adicional para queries directas
+    required: true
   },
   ingredients_text: { 
     type: String, 
     required: true 
   }
 }, { 
-  timestamps: false, // Los datos vienen de OpenFoodFacts, no necesitamos timestamps
-  collection: 'opff1' // Especificar la colección exacta que usaste
+  timestamps: false, // No necesitamos timestamps para datos de OpenFoodFacts
+  collection: 'opff1', // Nombre exacto de la colección
+  strict: false // Permitir campos adicionales sin validación
 });
 
-// =================== ÍNDICES MEJORADOS ===================
+// ❌ YA NO DEFINIMOS ÍNDICES AQUÍ - SE CREAN CON EL SCRIPT
 
-// Índice único en el código del producto
-ProductSchema.index({ code: 1 }, { unique: true });
-
-// Índices simples para búsquedas básicas (fallback)
-ProductSchema.index({ product_name: 1 });
-ProductSchema.index({ brands: 1 });
-
-// ⚠️ IMPORTANTE: No definir el índice de texto aquí
-// El índice de texto se crea dinámicamente en routes.js
-// Esto es porque los índices definidos en schemas no siempre se crean automáticamente
-// y pueden causar problemas de sincronización
-
-// =================== FUNCIONES DE INICIALIZACIÓN ===================
+// =================== INICIALIZACIÓN SIMPLIFICADA ===================
 
 let modelsInitialized = false;
 let models = {};
 
 /**
- * Verifica y crea índices básicos necesarios
- */
-async function ensureBasicIndexes() {
-  try {
-    console.log("🔧 Verificando índices básicos...");
-    
-    const productsConnection = getProductsConnection();
-    if (!productsConnection) {
-      console.log("⚠️ Conexión de productos no disponible para crear índices");
-      return false;
-    }
-    
-    // Obtener la colección directamente
-    const collection = productsConnection.collection('opff1');
-    
-    // Verificar índices existentes
-    const existingIndexes = await collection.getIndexes();
-    console.log("📋 Índices existentes:", Object.keys(existingIndexes));
-    
-    // Lista de índices básicos que necesitamos
-    const requiredIndexes = [
-      { key: { code: 1 }, name: 'code_1', unique: true },
-      { key: { product_name: 1 }, name: 'product_name_1' },
-      { key: { brands: 1 }, name: 'brands_1' }
-    ];
-    
-    // Crear índices faltantes
-    for (const indexDef of requiredIndexes) {
-      if (!existingIndexes[indexDef.name]) {
-        try {
-          console.log(`🔨 Creando índice: ${indexDef.name}`);
-          await collection.createIndex(indexDef.key, {
-            name: indexDef.name,
-            unique: indexDef.unique || false,
-            background: true // Crear en background para no bloquear
-          });
-          console.log(`✅ Índice creado: ${indexDef.name}`);
-        } catch (indexError) {
-          console.error(`❌ Error creando índice ${indexDef.name}:`, indexError.message);
-        }
-      }
-    }
-    
-    console.log("✅ Verificación de índices básicos completada");
-    return true;
-  } catch (error) {
-    console.error("❌ Error en verificación de índices básicos:", error);
-    return false;
-  }
-}
-
-/**
- * Inicializa todos los modelos con sus respectivas conexiones
+ * Inicializa todos los modelos SIN crear índices
  */
 async function initializeModels() {
   if (modelsInitialized) {
@@ -197,7 +131,7 @@ async function initializeModels() {
       throw new Error("Las conexiones de base de datos no están inicializadas");
     }
 
-    console.log("🔧 Inicializando modelos...");
+    console.log("🔧 Inicializando modelos (sin crear índices)...");
 
     // =================== MODELOS DB PRINCIPAL ===================
     models.User = mainConnection.model("User", UserSchema, "user");
@@ -210,13 +144,10 @@ async function initializeModels() {
     models.ProductReaction = mainConnection.model("ProductReaction", ProductReactionSchema, "productreactions");
     models.IngredientReaction = mainConnection.model("IngredientReaction", IngredientReactionSchema, "ingredientreactions");
 
-    // =================== MODELOS DB PRODUCTOS ===================
+    // =================== MODELO DB PRODUCTOS ===================
     models.Product = productsConnection.model("Product", ProductSchema, "opff1");
 
-    console.log("✅ Modelos inicializados correctamente");
-
-    // =================== CREAR ÍNDICES BÁSICOS ===================
-    await ensureBasicIndexes();
+    console.log("✅ Modelos inicializados correctamente (sin overhead de índices)");
 
     modelsInitialized = true;
     return models;
@@ -248,7 +179,7 @@ async function getModel(modelName) {
 }
 
 /**
- * Función de utilidad para obtener información de índices
+ * Función de utilidad para obtener información de índices (solo lectura)
  */
 async function getIndexInfo() {
   try {
@@ -258,10 +189,14 @@ async function getIndexInfo() {
     return {
       count: Object.keys(indexes).length,
       indexes: Object.keys(indexes),
-      hasTextIndex: Object.values(indexes).some(index => 
-        index.key && index.key._fts === 'text'
-      ),
-      details: indexes
+      details: Object.keys(indexes).reduce((acc, name) => {
+        acc[name] = {
+          key: indexes[name].key,
+          unique: indexes[name].unique || false,
+          sparse: indexes[name].sparse || false
+        };
+        return acc;
+      }, {})
     };
   } catch (error) {
     console.error("Error obteniendo información de índices:", error);
@@ -269,19 +204,18 @@ async function getIndexInfo() {
   }
 }
 
-// =================== EXPORTS ===================
+// =================== EXPORTS SIMPLIFICADOS ===================
 
 module.exports = {
-  // Funciones de inicialización
+  // Funciones principales
   initializeModels,
   getModels,
   getModel,
   
-  // Nuevas funciones de utilidad
-  ensureBasicIndexes,
+  // Función de información (solo lectura, no creación)
   getIndexInfo,
   
-  // Schemas para referencia (si necesitas crear modelos dinámicamente)
+  // Schemas para referencia
   schemas: {
     UserSchema,
     ArticleSchema,

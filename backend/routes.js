@@ -1,4 +1,4 @@
-// backend/routes.js - Versión completa con todas las rutas y mejoras de índices
+// backend/routes.js - VERSIÓN COMPLETA OPTIMIZADA SIN CREACIÓN DE ÍNDICES
 const express = require("express");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
@@ -7,83 +7,92 @@ const { getModel } = require('./models');
 
 const router = express.Router();
 
-// =================== UTILIDADES PARA ÍNDICES ===================
+// =================== BÚSQUEDA OPTIMIZADA DE PRODUCTOS ===================
 
 /**
- * Crea el índice de texto si no existe
+ * Búsqueda optimizada usando los índices pre-creados
+ * Ya NO crea/verifica índices en runtime
  */
-async function ensureTextIndex() {
+async function optimizedProductSearch(Product, searchTerm, page, limit) {
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  
+  // Crear consulta optimizada usando los índices compound
+  const searchQuery = {
+    $or: [
+      { 
+        product_name: { 
+          $regex: searchTerm, 
+          $options: 'i' 
+        } 
+      },
+      { 
+        brands: { 
+          $regex: searchTerm, 
+          $options: 'i' 
+        } 
+      }
+    ]
+  };
+  
+  console.log(`🔍 Búsqueda: "${searchTerm}" (página ${page})`);
+  const startTime = Date.now();
+  
   try {
-    const Product = await getModel('Product');
+    // Usar Promise.all para paralelizar count y find
+    const [products, total] = await Promise.all([
+      Product
+        .find(searchQuery)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean() // Más rápido que objetos Mongoose completos
+        .exec(),
+      Product.countDocuments(searchQuery).exec()
+    ]);
     
-    // Verificar si ya existe un índice de texto
-    const indexes = await Product.collection.getIndexes();
-    const hasTextIndex = Object.values(indexes).some(index => 
-      index.key && index.key._fts === 'text'
-    );
+    const endTime = Date.now();
+    console.log(`⚡ Búsqueda completada en ${endTime - startTime}ms (${total} resultados)`);
     
-    if (!hasTextIndex) {
-      console.log("🔧 Creando índice de texto para productos...");
-      
-      // Crear índice de texto
-      await Product.collection.createIndex(
-        { 
-          product_name: 'text', 
-          brands: 'text' 
-        },
-        {
-          weights: {
-            product_name: 10,
-            brands: 5
-          },
-          name: 'product_search_index',
-          default_language: 'english'
-        }
-      );
-      
-      console.log("✅ Índice de texto creado exitosamente");
-      return true;
-    } else {
-      console.log("✅ Índice de texto ya existe");
-      return true;
-    }
+    return { products, total };
   } catch (error) {
-    console.error("❌ Error creando índice de texto:", error);
-    return false;
+    console.error(`❌ Error en búsqueda optimizada:`, error);
+    throw error;
   }
 }
 
 /**
- * Búsqueda alternativa usando regex (fallback)
+ * Búsqueda para productos recientes (sin término de búsqueda)
  */
-async function searchWithRegex(Product, searchTerm, page, limit) {
-  console.log("🔄 Usando búsqueda alternativa con regex");
-  
+async function getRecentProducts(Product, page, limit) {
   const skip = (parseInt(page) - 1) * parseInt(limit);
   
-  // Crear consulta regex para múltiples campos
-  const regexQuery = {
-    $or: [
-      { product_name: { $regex: searchTerm, $options: 'i' } },
-      { brands: { $regex: searchTerm, $options: 'i' } }
-    ]
-  };
+  console.log(`📄 Obteniendo productos recientes (página ${page})`);
+  const startTime = Date.now();
   
-  // Ejecutar búsqueda
-  const [products, total] = await Promise.all([
-    Product.find(regexQuery)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean(),
-    Product.countDocuments(regexQuery)
-  ]);
-  
-  return { products, total };
+  try {
+    // Usar solo los campos necesarios para mejor rendimiento
+    const [products, total] = await Promise.all([
+      Product
+        .find({})
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean()
+        .exec(),
+      Product.estimatedDocumentCount() // Más rápido que countDocuments para totales
+    ]);
+    
+    const endTime = Date.now();
+    console.log(`⚡ Productos recientes obtenidos en ${endTime - startTime}ms`);
+    
+    return { products, total };
+  } catch (error) {
+    console.error(`❌ Error obteniendo productos recientes:`, error);
+    throw error;
+  }
 }
 
-// =================== RUTAS DE PRODUCTOS (DB PRODUCTOS) ===================
+// =================== RUTAS DE PRODUCTOS OPTIMIZADAS ===================
 
-// Buscar productos - Endpoint principal para el SearchComponent
+// Buscar productos - VERSIÓN SÚPER OPTIMIZADA
 router.get("/products/search", async (req, res) => {
   try {
     const { q, page = 1, limit = 15 } = req.query;
@@ -93,80 +102,28 @@ router.get("/products/search", async (req, res) => {
     let total = 0;
     let searchMethod = 'empty';
     
-    // Si no hay término de búsqueda, devolver productos recientes
+    // Validar parámetros
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit))); // Máximo 50 por página
+    
     if (!q || !q.trim()) {
-      const skip = (parseInt(page) - 1) * parseInt(limit);
-      
-      [products, total] = await Promise.all([
-        Product.find({})
-          .skip(skip)
-          .limit(parseInt(limit))
-          .lean(),
-        Product.countDocuments({})
-      ]);
-      
+      // Sin término de búsqueda: productos recientes
+      const result = await getRecentProducts(Product, pageNum, limitNum);
+      products = result.products;
+      total = result.total;
       searchMethod = 'recent';
     } else {
+      // Con término de búsqueda: usar búsqueda optimizada
       const searchTerm = q.trim();
-      
-      try {
-        // Intentar asegurar que el índice de texto existe
-        const indexExists = await ensureTextIndex();
-        
-        if (indexExists) {
-          // Intentar búsqueda con $text primero
-          try {
-            const skip = (parseInt(page) - 1) * parseInt(limit);
-            const textQuery = {
-              $text: { 
-                $search: searchTerm,
-                $caseSensitive: false
-              }
-            };
-            
-            [products, total] = await Promise.all([
-              Product.find(textQuery)
-                .skip(skip)
-                .limit(parseInt(limit))
-                .lean(),
-              Product.countDocuments(textQuery)
-            ]);
-            
-            searchMethod = 'text_index';
-            console.log(`✅ Búsqueda exitosa con índice de texto: ${products.length} resultados`);
-          } catch (textError) {
-            console.log("⚠️ Error con búsqueda de texto, usando regex fallback:", textError.message);
-            const result = await searchWithRegex(Product, searchTerm, page, limit);
-            products = result.products;
-            total = result.total;
-            searchMethod = 'regex_fallback';
-          }
-        } else {
-          // Si no se pudo crear el índice, usar regex directamente
-          const result = await searchWithRegex(Product, searchTerm, page, limit);
-          products = result.products;
-          total = result.total;
-          searchMethod = 'regex_direct';
-        }
-      } catch (searchError) {
-        console.error("❌ Error en búsqueda:", searchError);
-        
-        // Último fallback: búsqueda básica con regex
-        try {
-          const result = await searchWithRegex(Product, searchTerm, page, limit);
-          products = result.products;
-          total = result.total;
-          searchMethod = 'regex_emergency';
-        } catch (finalError) {
-          console.error("💥 Error crítico en búsqueda:", finalError);
-          throw new Error("No se pudo realizar la búsqueda. Por favor, intenta más tarde.");
-        }
-      }
+      const result = await optimizedProductSearch(Product, searchTerm, pageNum, limitNum);
+      products = result.products;
+      total = result.total;
+      searchMethod = 'optimized_search';
     }
     
-    // Normalizar los datos
+    // Normalizar datos de manera eficiente
     const normalizedProducts = products.map(product => ({
-      code: product.code.toString(),
+      code: String(product.code), // Más rápido que toString()
       product_name: product.product_name || '',
       brands: product.brands || '',
       ingredients_text: product.ingredients_text || ''
@@ -175,155 +132,200 @@ router.get("/products/search", async (req, res) => {
     res.json({
       products: normalizedProducts,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / limitNum)
       },
       meta: {
         searchMethod,
         query: q || null,
-        resultsCount: normalizedProducts.length
+        resultsCount: normalizedProducts.length,
+        cached: false // Para futuras optimizaciones de cache
       }
     });
+    
   } catch (error) {
-    console.error('💥 Error searching products:', error);
+    console.error('💥 Error en búsqueda de productos:', error);
     res.status(500).json({ 
-      error: error.message || "Error en la búsqueda de productos",
-      code: "SEARCH_ERROR"
+      error: "Error en la búsqueda de productos",
+      code: "SEARCH_ERROR",
+      message: "La búsqueda falló. Por favor, intenta con términos diferentes."
     });
   }
 });
 
-// Obtener producto por código
+// Obtener producto por código - OPTIMIZADO
 router.get("/products/:code", async (req, res) => {
   try {
     const { code } = req.params;
+    
+    if (!code || code.trim() === '') {
+      return res.status(400).json({ 
+        error: "Código de producto requerido",
+        code: "MISSING_CODE"
+      });
+    }
+    
     const Product = await getModel('Product');
     
-    // Buscar por code (puede ser string o number)
-    const product = await Product.findOne({
-      $or: [
-        { code: code },
-        { code: parseInt(code) }
-      ]
-    }).lean();
+    console.log(`🔍 Buscando producto: ${code}`);
+    const startTime = Date.now();
+    
+    // Usar el índice único de code
+    const product = await Product
+      .findOne({ code: code })
+      .lean()
+      .exec();
+    
+    const endTime = Date.now();
+    console.log(`⚡ Búsqueda por código completada en ${endTime - startTime}ms`);
     
     if (!product) {
       return res.status(404).json({ 
-        error: "Product not found",
+        error: "Producto no encontrado",
         code: "PRODUCT_NOT_FOUND"
       });
     }
     
-    // Normalizar los datos
+    // Normalizar producto
     const normalizedProduct = {
-      code: product.code.toString(),
+      code: String(product.code),
       product_name: product.product_name || '',
       brands: product.brands || '',
       ingredients_text: product.ingredients_text || ''
     };
     
     res.json(normalizedProduct);
+    
   } catch (error) {
-    console.error('Error getting product:', error);
+    console.error('❌ Error obteniendo producto por código:', error);
     res.status(500).json({ 
-      error: error.message || "Error obteniendo el producto",
+      error: "Error obteniendo el producto",
       code: "GET_PRODUCT_ERROR"
     });
   }
 });
 
-// Obtener productos por categoría/marca (para CategoryListScreen)
+// Productos por categoría - OPTIMIZADO
 router.get("/products/category/:brand", async (req, res) => {
   try {
     const { brand } = req.params;
     const { organic = false } = req.query;
+    
+    if (!brand || brand.trim() === '') {
+      return res.status(400).json({ 
+        error: "Marca/categoría requerida",
+        code: "MISSING_BRAND"
+      });
+    }
+    
     const Product = await getModel('Product');
     
+    console.log(`🏷️ Buscando productos de marca: ${brand} (organic: ${organic})`);
+    const startTime = Date.now();
+    
+    // Construir query optimizada
     let query = {
-      brands: new RegExp(brand, 'i') // Case insensitive
+      brands: new RegExp(brand, 'i')
     };
     
-    // Si se solicitan productos orgánicos, filtrar por código que empiece con "SSS"
+    // Si se solicitan orgánicos, usar el índice partial
     if (organic === 'true') {
       query.code = /^SSS/;
     }
     
-    const products = await Product.find(query)
-      .limit(100) // Limitar resultados
-      .lean();
+    const products = await Product
+      .find(query)
+      .limit(100) // Límite razonable
+      .lean()
+      .exec();
     
-    // Normalizar los datos
+    const endTime = Date.now();
+    console.log(`⚡ Productos por categoría obtenidos en ${endTime - startTime}ms (${products.length} resultados)`);
+    
+    // Normalizar productos
     const normalizedProducts = products.map(product => ({
-      code: product.code.toString(),
+      code: String(product.code),
       product_name: product.product_name || '',
       brands: product.brands || '',
       ingredients_text: product.ingredients_text || ''
     }));
     
     res.json(normalizedProducts);
+    
   } catch (error) {
-    console.error('Error getting products by category:', error);
+    console.error('❌ Error obteniendo productos por categoría:', error);
     res.status(500).json({ 
-      error: error.message || "Error obteniendo productos por categoría",
+      error: "Error obteniendo productos por categoría",
       code: "CATEGORY_ERROR"
     });
   }
 });
 
-// Estadísticas de productos
+// Estadísticas - OPTIMIZADO
 router.get("/products/stats", async (req, res) => {
   try {
     const Product = await getModel('Product');
     
+    console.log("📊 Obteniendo estadísticas de productos...");
+    const startTime = Date.now();
+    
+    // Usar estimatedDocumentCount para el total (más rápido)
     const [total, organic, withIngredients] = await Promise.all([
-      Product.countDocuments(),
+      Product.estimatedDocumentCount(),
       Product.countDocuments({ code: /^SSS/ }),
-      Product.countDocuments({ ingredients_text: { $exists: true, $ne: '' } })
+      Product.countDocuments({ 
+        ingredients_text: { $exists: true, $ne: '' } 
+      })
     ]);
+    
+    const endTime = Date.now();
+    console.log(`⚡ Estadísticas obtenidas en ${endTime - startTime}ms`);
     
     res.json({
       total,
       organic,
       withIngredients,
-      regular: total - organic
+      regular: total - organic,
+      generated_at: new Date().toISOString()
     });
+    
   } catch (error) {
-    console.error('Error getting product stats:', error);
+    console.error('❌ Error obteniendo estadísticas:', error);
     res.status(500).json({ 
-      error: error.message || "Error obteniendo estadísticas",
+      error: "Error obteniendo estadísticas",
       code: "STATS_ERROR"
     });
   }
 });
 
-// Endpoint para crear índice manualmente (útil para debugging)
-router.post("/products/create-index", async (req, res) => {
+// Endpoint para verificar índices (solo para debugging)
+router.get("/products/index-info", async (req, res) => {
   try {
-    const success = await ensureTextIndex();
+    const Product = await getModel('Product');
+    const indexes = await Product.collection.getIndexes();
     
-    if (success) {
-      res.json({ 
-        message: "Índice de texto creado/verificado exitosamente",
-        success: true
-      });
-    } else {
-      res.status(500).json({ 
-        error: "No se pudo crear el índice de texto",
-        success: false
-      });
-    }
+    const indexInfo = {
+      totalIndexes: Object.keys(indexes).length,
+      indexes: Object.keys(indexes).map(name => ({
+        name,
+        key: indexes[name].key,
+        unique: indexes[name].unique || false
+      }))
+    };
+    
+    res.json(indexInfo);
   } catch (error) {
-    console.error('Error creating index:', error);
+    console.error('❌ Error obteniendo información de índices:', error);
     res.status(500).json({ 
-      error: error.message,
-      success: false
+      error: "Error obteniendo información de índices",
+      message: error.message 
     });
   }
 });
 
-// =================== RUTAS EXISTENTES ===================
+// =================== RUTAS EXISTENTES (COMPLETAS) ===================
 
 // Ruta de prueba para POST
 router.post("/test", (req, res) => {
@@ -969,12 +971,14 @@ router.get("/diagnostico", async (req, res) => {
         productIndexInfo = {
           totalIndexes: Object.keys(indexes).length,
           indexNames: Object.keys(indexes),
-          hasTextIndex: Object.values(indexes).some(index => 
-            index.key && index.key._fts === 'text'
-          ),
-          textIndexDetails: Object.values(indexes).find(index => 
-            index.key && index.key._fts === 'text'
-          ) || null
+          optimized: Object.keys(indexes).includes('product_search_compound_idx'),
+          details: Object.keys(indexes).reduce((acc, name) => {
+            acc[name] = {
+              key: indexes[name].key,
+              unique: indexes[name].unique || false
+            };
+            return acc;
+          }, {})
         };
       } catch (indexError) {
         productIndexInfo = { error: indexError.message };
@@ -1008,33 +1012,6 @@ router.get("/diagnostico", async (req, res) => {
   } catch (error) {
     res.status(500).json({ 
       error: "Error en diagnóstico",
-      message: error.message 
-    });
-  }
-});
-
-// Ruta específica para información de índices
-router.get("/index-status", async (req, res) => {
-  try {
-    const Product = await getModel('Product');
-    const indexes = await Product.collection.getIndexes();
-    
-    const indexInfo = {
-      totalIndexes: Object.keys(indexes).length,
-      indexes: Object.keys(indexes).map(name => ({
-        name,
-        key: indexes[name].key,
-        isTextIndex: indexes[name].key && indexes[name].key._fts === 'text'
-      })),
-      hasTextIndex: Object.values(indexes).some(index => 
-        index.key && index.key._fts === 'text'
-      )
-    };
-    
-    res.json(indexInfo);
-  } catch (error) {
-    res.status(500).json({ 
-      error: "Error obteniendo información de índices",
       message: error.message 
     });
   }
