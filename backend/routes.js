@@ -1,4 +1,4 @@
-// backend/routes.js - Actualizado con endpoints de productos y múltiples DBs
+// backend/routes.js - Versión completa con todas las rutas y mejoras de índices
 const express = require("express");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
@@ -6,6 +6,80 @@ const { authenticateUser } = require('./auth');
 const { getModel } = require('./models');
 
 const router = express.Router();
+
+// =================== UTILIDADES PARA ÍNDICES ===================
+
+/**
+ * Crea el índice de texto si no existe
+ */
+async function ensureTextIndex() {
+  try {
+    const Product = await getModel('Product');
+    
+    // Verificar si ya existe un índice de texto
+    const indexes = await Product.collection.getIndexes();
+    const hasTextIndex = Object.values(indexes).some(index => 
+      index.key && index.key._fts === 'text'
+    );
+    
+    if (!hasTextIndex) {
+      console.log("🔧 Creando índice de texto para productos...");
+      
+      // Crear índice de texto
+      await Product.collection.createIndex(
+        { 
+          product_name: 'text', 
+          brands: 'text' 
+        },
+        {
+          weights: {
+            product_name: 10,
+            brands: 5
+          },
+          name: 'product_search_index',
+          default_language: 'english'
+        }
+      );
+      
+      console.log("✅ Índice de texto creado exitosamente");
+      return true;
+    } else {
+      console.log("✅ Índice de texto ya existe");
+      return true;
+    }
+  } catch (error) {
+    console.error("❌ Error creando índice de texto:", error);
+    return false;
+  }
+}
+
+/**
+ * Búsqueda alternativa usando regex (fallback)
+ */
+async function searchWithRegex(Product, searchTerm, page, limit) {
+  console.log("🔄 Usando búsqueda alternativa con regex");
+  
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  
+  // Crear consulta regex para múltiples campos
+  const regexQuery = {
+    $or: [
+      { product_name: { $regex: searchTerm, $options: 'i' } },
+      { brands: { $regex: searchTerm, $options: 'i' } }
+    ]
+  };
+  
+  // Ejecutar búsqueda
+  const [products, total] = await Promise.all([
+    Product.find(regexQuery)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(),
+    Product.countDocuments(regexQuery)
+  ]);
+  
+  return { products, total };
+}
 
 // =================== RUTAS DE PRODUCTOS (DB PRODUCTOS) ===================
 
@@ -15,31 +89,82 @@ router.get("/products/search", async (req, res) => {
     const { q, page = 1, limit = 15 } = req.query;
     const Product = await getModel('Product');
     
-    let query = {};
+    let products = [];
+    let total = 0;
+    let searchMethod = 'empty';
     
-    // Si hay término de búsqueda, usar texto completo
-    if (q && q.trim()) {
-      query = {
-        $text: { 
-          $search: q.trim(),
-          $caseSensitive: false
+    // Si no hay término de búsqueda, devolver productos recientes
+    if (!q || !q.trim()) {
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      [products, total] = await Promise.all([
+        Product.find({})
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean(),
+        Product.countDocuments({})
+      ]);
+      
+      searchMethod = 'recent';
+    } else {
+      const searchTerm = q.trim();
+      
+      try {
+        // Intentar asegurar que el índice de texto existe
+        const indexExists = await ensureTextIndex();
+        
+        if (indexExists) {
+          // Intentar búsqueda con $text primero
+          try {
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+            const textQuery = {
+              $text: { 
+                $search: searchTerm,
+                $caseSensitive: false
+              }
+            };
+            
+            [products, total] = await Promise.all([
+              Product.find(textQuery)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .lean(),
+              Product.countDocuments(textQuery)
+            ]);
+            
+            searchMethod = 'text_index';
+            console.log(`✅ Búsqueda exitosa con índice de texto: ${products.length} resultados`);
+          } catch (textError) {
+            console.log("⚠️ Error con búsqueda de texto, usando regex fallback:", textError.message);
+            const result = await searchWithRegex(Product, searchTerm, page, limit);
+            products = result.products;
+            total = result.total;
+            searchMethod = 'regex_fallback';
+          }
+        } else {
+          // Si no se pudo crear el índice, usar regex directamente
+          const result = await searchWithRegex(Product, searchTerm, page, limit);
+          products = result.products;
+          total = result.total;
+          searchMethod = 'regex_direct';
         }
-      };
+      } catch (searchError) {
+        console.error("❌ Error en búsqueda:", searchError);
+        
+        // Último fallback: búsqueda básica con regex
+        try {
+          const result = await searchWithRegex(Product, searchTerm, page, limit);
+          products = result.products;
+          total = result.total;
+          searchMethod = 'regex_emergency';
+        } catch (finalError) {
+          console.error("💥 Error crítico en búsqueda:", finalError);
+          throw new Error("No se pudo realizar la búsqueda. Por favor, intenta más tarde.");
+        }
+      }
     }
     
-    // Calcular skip para paginación
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    // Ejecutar búsqueda con paginación
-    const [products, total] = await Promise.all([
-      Product.find(query)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(), // Usar lean() para mejor performance
-      Product.countDocuments(query)
-    ]);
-    
-    // Normalizar los datos (convertir code a string si es necesario)
+    // Normalizar los datos
     const normalizedProducts = products.map(product => ({
       code: product.code.toString(),
       product_name: product.product_name || '',
@@ -54,11 +179,19 @@ router.get("/products/search", async (req, res) => {
         limit: parseInt(limit),
         total,
         pages: Math.ceil(total / parseInt(limit))
+      },
+      meta: {
+        searchMethod,
+        query: q || null,
+        resultsCount: normalizedProducts.length
       }
     });
   } catch (error) {
-    console.error('Error searching products:', error);
-    res.status(500).json({ error: error.message });
+    console.error('💥 Error searching products:', error);
+    res.status(500).json({ 
+      error: error.message || "Error en la búsqueda de productos",
+      code: "SEARCH_ERROR"
+    });
   }
 });
 
@@ -77,7 +210,10 @@ router.get("/products/:code", async (req, res) => {
     }).lean();
     
     if (!product) {
-      return res.status(404).json({ error: "Product not found" });
+      return res.status(404).json({ 
+        error: "Product not found",
+        code: "PRODUCT_NOT_FOUND"
+      });
     }
     
     // Normalizar los datos
@@ -91,7 +227,10 @@ router.get("/products/:code", async (req, res) => {
     res.json(normalizedProduct);
   } catch (error) {
     console.error('Error getting product:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message || "Error obteniendo el producto",
+      code: "GET_PRODUCT_ERROR"
+    });
   }
 });
 
@@ -126,7 +265,10 @@ router.get("/products/category/:brand", async (req, res) => {
     res.json(normalizedProducts);
   } catch (error) {
     console.error('Error getting products by category:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message || "Error obteniendo productos por categoría",
+      code: "CATEGORY_ERROR"
+    });
   }
 });
 
@@ -149,11 +291,39 @@ router.get("/products/stats", async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting product stats:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message || "Error obteniendo estadísticas",
+      code: "STATS_ERROR"
+    });
   }
 });
 
-// =================== RUTAS EXISTENTES ACTUALIZADAS ===================
+// Endpoint para crear índice manualmente (útil para debugging)
+router.post("/products/create-index", async (req, res) => {
+  try {
+    const success = await ensureTextIndex();
+    
+    if (success) {
+      res.json({ 
+        message: "Índice de texto creado/verificado exitosamente",
+        success: true
+      });
+    } else {
+      res.status(500).json({ 
+        error: "No se pudo crear el índice de texto",
+        success: false
+      });
+    }
+  } catch (error) {
+    console.error('Error creating index:', error);
+    res.status(500).json({ 
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+// =================== RUTAS EXISTENTES ===================
 
 // Ruta de prueba para POST
 router.post("/test", (req, res) => {
@@ -347,9 +517,8 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
-// =================== RESTO DE RUTAS ACTUALIZADAS ===================
+// =================== RUTAS DE WISHLIST ===================
 
-// Rutas de Wishlist
 router.get("/wishlist", authenticateUser, async (req, res) => {
   try {
     const Wishlist = await getModel('Wishlist');
@@ -399,7 +568,8 @@ router.delete("/wishlist/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// Rutas de Tests
+// =================== RUTAS DE TESTS ===================
+
 router.get("/tests", authenticateUser, async (req, res) => {
   try {
     const Test = await getModel('Test');
@@ -475,7 +645,8 @@ router.put("/tests/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// Rutas de Product Notes
+// =================== RUTAS DE PRODUCT NOTES ===================
+
 router.get("/productnotes", authenticateUser, async (req, res) => {
   try {
     const ProductNote = await getModel('ProductNote');
@@ -527,7 +698,8 @@ router.put("/productnotes/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// Rutas de Product Reactions
+// =================== RUTAS DE PRODUCT REACTIONS ===================
+
 router.get("/product-reactions", authenticateUser, async (req, res) => {
   try {
     const ProductReaction = await getModel('ProductReaction');
@@ -583,7 +755,8 @@ router.delete("/product-reactions/:productID", authenticateUser, async (req, res
   }
 });
 
-// Rutas de Ingredient Reactions
+// =================== RUTAS DE INGREDIENT REACTIONS ===================
+
 router.get("/ingredient-reactions", authenticateUser, async (req, res) => {
   console.log("[DEBUG] Received request for /ingredient-reactions");
   console.log("[DEBUG] User ID:", req.user.userID);
@@ -646,10 +819,119 @@ router.delete("/ingredient-reactions/:ingredientName", authenticateUser, async (
   }
 });
 
-// Otras rutas...
+// =================== RUTAS DE UTILIDAD ===================
+
+// Rutas de Articles
+router.get("/articles", async (req, res) => {
+  try {
+    const Article = await getModel('Article');
+    const articles = await Article.find();
+    res.json(articles);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas de History
+router.get("/history", authenticateUser, async (req, res) => {
+  try {
+    const History = await getModel('History');
+    const history = await History.find({ userID: req.user.userID });
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verificación de token
 router.get("/verify-token", authenticateUser, (req, res) => {
   res.json({ valid: true, user: req.user });
 });
+
+// Perfil de usuario
+router.get("/profile", authenticateUser, async (req, res) => {
+  try {
+    const User = await getModel('User');
+    const user = await User.findOne({ userID: req.user.userID }).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cambiar contraseña
+router.post("/change-password", authenticateUser, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const User = await getModel('User');
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        error: "Current password and new password are required" 
+      });
+    }
+    
+    const user = await User.findOne({ userID: req.user.userID });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    const validPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ 
+        error: "New password must be at least 8 characters long" 
+      });
+    }
+    
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedNewPassword;
+    await user.save();
+    
+    res.json({ message: "Password changed successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Actualizar período de prueba
+router.post("/update-trial-period", authenticateUser, async (req, res) => {
+  try {
+    const { trialDays } = req.body;
+    const User = await getModel('User');
+    
+    if (typeof trialDays !== 'number' || trialDays < 0) {
+      return res.status(400).json({ 
+        error: "Trial days must be a positive number" 
+      });
+    }
+    
+    const user = await User.findOne({ userID: req.user.userID });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    user.trialPeriodDays = trialDays;
+    await user.save();
+    
+    res.json({ 
+      message: "Trial period updated successfully",
+      trialPeriodDays: trialDays
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =================== DIAGNÓSTICO Y DEBUG ===================
 
 // Diagnóstico mejorado
 router.get("/diagnostico", async (req, res) => {
@@ -659,32 +941,102 @@ router.get("/diagnostico", async (req, res) => {
       nodeVersion: process.version
     };
     
-    const User = await getModel('User');
-    const Test = await getModel('Test');
-    const Wishlist = await getModel('Wishlist');
-    const Product = await getModel('Product');
+    let counts = {};
+    let productIndexInfo = {};
+    let error = null;
     
-    const [usuarios, tests, wishlists, productos] = await Promise.all([
-      User.countDocuments(),
-      Test.countDocuments(),
-      Wishlist.countDocuments(),
-      Product.countDocuments()
-    ]);
+    try {
+      // Contar documentos en DB principal
+      const User = await getModel('User');
+      const Test = await getModel('Test');
+      const Wishlist = await getModel('Wishlist');
+      const ProductReaction = await getModel('ProductReaction');
+      const IngredientReaction = await getModel('IngredientReaction');
+      
+      counts.usuarios = await User.countDocuments();
+      counts.tests = await Test.countDocuments();
+      counts.wishlists = await Wishlist.countDocuments();
+      counts.productReactions = await ProductReaction.countDocuments();
+      counts.ingredientReactions = await IngredientReaction.countDocuments();
+      
+      // Contar productos y obtener info de índices
+      const Product = await getModel('Product');
+      counts.productos = await Product.countDocuments();
+      
+      // Información de índices de productos
+      try {
+        const indexes = await Product.collection.getIndexes();
+        productIndexInfo = {
+          totalIndexes: Object.keys(indexes).length,
+          indexNames: Object.keys(indexes),
+          hasTextIndex: Object.values(indexes).some(index => 
+            index.key && index.key._fts === 'text'
+          ),
+          textIndexDetails: Object.values(indexes).find(index => 
+            index.key && index.key._fts === 'text'
+          ) || null
+        };
+      } catch (indexError) {
+        productIndexInfo = { error: indexError.message };
+      }
+      
+    } catch (countError) {
+      error = countError.message;
+      console.error("Error contando documentos:", countError);
+    }
     
-    const ultimosUsuarios = await User.find().sort({ createdAt: -1 }).limit(3).select('-password');
+    // Últimos usuarios (sin contraseñas)
+    let ultimosUsuarios = [];
+    try {
+      const User = await getModel('User');
+      ultimosUsuarios = await User.find()
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .select('-password')
+        .lean();
+    } catch (userError) {
+      console.error("Error obteniendo últimos usuarios:", userError);
+    }
     
     res.json({
       info,
-      contadores: {
-        usuarios,
-        tests,
-        wishlists,
-        productos
-      },
-      ultimosUsuarios
+      contadores: counts,
+      productIndexes: productIndexInfo,
+      ultimosUsuarios,
+      error: error
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: "Error en diagnóstico",
+      message: error.message 
+    });
+  }
+});
+
+// Ruta específica para información de índices
+router.get("/index-status", async (req, res) => {
+  try {
+    const Product = await getModel('Product');
+    const indexes = await Product.collection.getIndexes();
+    
+    const indexInfo = {
+      totalIndexes: Object.keys(indexes).length,
+      indexes: Object.keys(indexes).map(name => ({
+        name,
+        key: indexes[name].key,
+        isTextIndex: indexes[name].key && indexes[name].key._fts === 'text'
+      })),
+      hasTextIndex: Object.values(indexes).some(index => 
+        index.key && index.key._fts === 'text'
+      )
+    };
+    
+    res.json(indexInfo);
+  } catch (error) {
+    res.status(500).json({ 
+      error: "Error obteniendo información de índices",
+      message: error.message 
+    });
   }
 });
 
