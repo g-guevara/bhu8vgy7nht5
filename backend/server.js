@@ -37,25 +37,66 @@ async function initializeDatabases() {
     return true;
   }
 
+  console.log("🚀 Inicializando conexiones a las bases de datos...");
+  
+  let mainConnected = false;
+  let productsConnected = false;
+  
   try {
-    console.log("🚀 Inicializando conexiones a las bases de datos...");
-    
-    // 1. Conectar a ambas bases de datos
-    await initializeConnections();
-    
-    // 2. Configurar handlers de eventos
-    setupConnectionHandlers();
-    
-    // 3. Inicializar modelos
-    await initializeModels();
-    
-    dbInitialized = true;
-    console.log("✅ Todas las bases de datos y modelos inicializados correctamente");
-    
-    return true;
+    // 1. Intentar conectar a la base de datos principal
+    try {
+      await initializeConnections();
+      
+      // 2. Configurar handlers de eventos
+      setupConnectionHandlers();
+      
+      // 3. Verificar estados de conexión
+      const status = getConnectionStatus();
+      mainConnected = status.main.status === 'connected';
+      productsConnected = status.products.status === 'connected';
+      
+      console.log(`📊 Estado después de conexión inicial:`, status);
+      
+      if (mainConnected || productsConnected) {
+        // 4. Inicializar modelos solo si al menos una conexión funciona
+        await initializeModels();
+        
+        dbInitialized = true;
+        console.log(`✅ Inicialización completada. Principal: ${mainConnected ? '✅' : '❌'}, Productos: ${productsConnected ? '✅' : '❌'}`);
+        
+        return true;
+      } else {
+        throw new Error("Ninguna base de datos se pudo conectar");
+      }
+    } catch (connectionError) {
+      console.error("❌ Error en conexiones:", connectionError);
+      
+      // Si hay error de conexión, intentar inicializar modelos con conexiones parciales
+      try {
+        const status = getConnectionStatus();
+        console.log("🔄 Intentando inicializar modelos con conexiones parciales:", status);
+        
+        if (status.main.status === 'connected' || status.products.status === 'connected') {
+          await initializeModels();
+          dbInitialized = true;
+          console.log("⚠️ Inicialización parcial completada");
+          return true;
+        }
+      } catch (modelError) {
+        console.error("❌ Error inicializando modelos:", modelError);
+      }
+      
+      throw connectionError;
+    }
   } catch (error) {
-    console.error("💥 Error inicializando bases de datos:", error);
-    throw error;
+    console.error("💥 Error fatal inicializando bases de datos:", error);
+    
+    // Marcar como inicializado para evitar reintentos constantes
+    dbInitialized = true;
+    
+    // No lanzar error, permitir que el servidor continúe
+    console.log("⚠️ Servidor continuará con funcionalidad limitada");
+    return false;
   }
 }
 
@@ -63,7 +104,7 @@ async function initializeDatabases() {
 
 app.use(async (req, res, next) => {
   // Skip database check for health and root routes
-  if (req.path === '/' || req.path === '/health') {
+  if (req.path === '/' || req.path === '/health' || req.path === '/diagnostico') {
     return next();
   }
   
@@ -71,41 +112,81 @@ app.use(async (req, res, next) => {
     // Initialize databases if not already done
     if (!dbInitialized) {
       console.log("🔄 Inicializando bases de datos en middleware...");
-      await initializeDatabases();
+      try {
+        await initializeDatabases();
+      } catch (initError) {
+        console.error("❌ Error inicializando DBs en middleware:", initError);
+        // No bloquear completamente, continuar con conexiones parciales
+      }
     }
     
     // Check connection status
     const status = getConnectionStatus();
+    console.log(`📊 Estado de conexiones para ${req.path}:`, status);
     
-    // Verificar que al menos una conexión esté activa
-    const mainConnected = status.main.status === 'connected';
-    const productsConnected = status.products.status === 'connected';
-    
-    // Para rutas de productos, necesitamos la DB de productos
-    if (req.path.includes('/products') && !productsConnected) {
-      console.error("❌ DB de productos no conectada para ruta:", req.path);
-      return res.status(503).json({ 
-        error: "Products database unavailable",
-        message: "La base de datos de productos no está disponible temporalmente"
-      });
+    // Para rutas de productos, verificar DB de productos
+    if (req.path.includes('/products')) {
+      const productsConnected = status.products.status === 'connected';
+      
+      if (!productsConnected) {
+        console.error(`❌ DB de productos no disponible para ${req.path}`);
+        console.log("🔄 Intentando reconectar a DB de productos...");
+        
+        // Intentar reconectar una vez más
+        try {
+          await initializeDatabases();
+          const newStatus = getConnectionStatus();
+          if (newStatus.products.status !== 'connected') {
+            return res.status(503).json({ 
+              error: "Products database unavailable",
+              message: "La base de datos de productos no está disponible temporalmente",
+              status: newStatus.products.status,
+              suggestion: "Por favor, intenta nuevamente en unos momentos"
+            });
+          }
+        } catch (retryError) {
+          console.error("❌ Error en reintento de conexión:", retryError);
+          return res.status(503).json({ 
+            error: "Products database unavailable",
+            message: "No se puede conectar a la base de datos de productos",
+            details: retryError.message
+          });
+        }
+      }
     }
     
-    // Para otras rutas, necesitamos la DB principal
-    if (!req.path.includes('/products') && !mainConnected) {
-      console.error("❌ DB principal no conectada para ruta:", req.path);
-      return res.status(503).json({ 
-        error: "Main database unavailable",
-        message: "La base de datos principal no está disponible temporalmente"
-      });
+    // Para otras rutas, verificar DB principal (pero ser más permisivo)
+    if (!req.path.includes('/products')) {
+      const mainConnected = status.main.status === 'connected';
+      
+      if (!mainConnected) {
+        console.warn(`⚠️ DB principal no conectada para ${req.path}, intentando continuar...`);
+        
+        // Solo bloquear si la ruta requiere autenticación y la DB está completamente desconectada
+        if (status.main.status === 'disconnected') {
+          return res.status(503).json({ 
+            error: "Main database unavailable",
+            message: "La base de datos principal no está disponible temporalmente"
+          });
+        }
+        // Si está "connecting", permitir continuar
+      }
     }
     
     next();
   } catch (error) {
     console.error("💥 Error en middleware de DB:", error);
-    return res.status(500).json({ 
-      error: "Database initialization error",
-      message: "Error al conectar con las bases de datos"
-    });
+    
+    // Si es un error crítico, responder con error, sino continuar
+    if (error.message.includes('timeout') || error.message.includes('connection')) {
+      return res.status(503).json({ 
+        error: "Database connection error",
+        message: "Error temporal de conexión a la base de datos"
+      });
+    }
+    
+    // Para otros errores, continuar y que la ruta maneje el error
+    next();
   }
 });
 

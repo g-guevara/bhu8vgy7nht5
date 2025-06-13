@@ -15,21 +15,27 @@ const DB_CONFIGS = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 5000, // Reducido para detectar errores más rápido
+      socketTimeoutMS: 10000,
+      connectTimeoutMS: 5000,
+      bufferCommands: false, // Desactivar buffering para fallar rápido
+      bufferMaxEntries: 0
     }
   },
   
   // Base de datos de productos (OpenFoodFacts)
   products: {
-    uri: "mongodb+srv://frituMA3wuxUBrLXl1re:11lBr2phenuwrebopher@cluster0.sz3esol.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    dbName: "test", // Ajusta según el nombre real de tu DB
+    uri: process.env.PRODUCTS_MONGODB_URI || "mongodb+srv://frituMA3wuxUBrLXl1re:11lBr2phenuwrebopher@cluster0.sz3esol.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0",
+    dbName: "test", // Usar "test" como nombre de DB
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       maxPoolSize: 5,
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 5000, // Reducido para detectar errores más rápido
+      socketTimeoutMS: 10000,
+      connectTimeoutMS: 5000,
+      bufferCommands: false, // Desactivar buffering para fallar rápido
+      bufferMaxEntries: 0
     }
   }
 };
@@ -44,18 +50,35 @@ async function connectToMainDB() {
 
   try {
     console.log("🔄 Conectando a la base de datos principal...");
+    console.log("📍 URI:", DB_CONFIGS.main.uri ? "✅ Configurada" : "❌ No configurada");
+    
     mainDbConnection = await mongoose.createConnection(
       DB_CONFIGS.main.uri, 
-      {
-        ...DB_CONFIGS.main.options,
-        dbName: DB_CONFIGS.main.dbName
-      }
+      DB_CONFIGS.main.options
     );
+    
+    // Esperar a que la conexión se establezca
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout conectando a DB principal'));
+      }, 10000);
+      
+      mainDbConnection.once('connected', () => {
+        clearTimeout(timeout);
+        resolve(true);
+      });
+      
+      mainDbConnection.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
     
     console.log("✅ Conectado a la base de datos principal");
     return mainDbConnection;
   } catch (error) {
     console.error("❌ Error conectando a la base de datos principal:", error);
+    mainDbConnection = null;
     throw error;
   }
 }
@@ -70,18 +93,35 @@ async function connectToProductsDB() {
 
   try {
     console.log("🔄 Conectando a la base de datos de productos...");
+    console.log("📍 URI productos:", "mongodb+srv://frituMA3wuxUBrLXl1re:***@cluster0.sz3esol.mongodb.net/");
+    
     productsDbConnection = await mongoose.createConnection(
       DB_CONFIGS.products.uri,
-      {
-        ...DB_CONFIGS.products.options,
-        dbName: DB_CONFIGS.products.dbName
-      }
+      DB_CONFIGS.products.options
     );
+    
+    // Esperar a que la conexión se establezca
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout conectando a DB de productos'));
+      }, 10000);
+      
+      productsDbConnection.once('connected', () => {
+        clearTimeout(timeout);
+        resolve(true);
+      });
+      
+      productsDbConnection.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
     
     console.log("✅ Conectado a la base de datos de productos");
     return productsDbConnection;
   } catch (error) {
     console.error("❌ Error conectando a la base de datos de productos:", error);
+    productsDbConnection = null;
     throw error;
   }
 }
