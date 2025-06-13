@@ -1,4 +1,4 @@
-// backend/mongoConnections.js - Versión con mejor debug
+// backend/mongoConnections.js
 const mongoose = require("mongoose");
 
 // Cache para las conexiones
@@ -9,33 +9,27 @@ let productsDbConnection = null;
 const DB_CONFIGS = {
   // Base de datos principal (usuarios, tests, etc.)
   main: {
-    uri: process.env.MONGODB_URI,
+    uri: process.env.MONGODB_URI, // mongodb+srv://db:db@g4.qjjm4pj.mongodb.net/...
     dbName: "sensitivv",
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 10000, // Aumentado para Vercel
+      serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
-      bufferCommands: false,
-      family: 4 // Forzar IPv4
     }
   },
   
   // Base de datos de productos (OpenFoodFacts)
   products: {
-    uri: process.env.PRODUCTS_MONGODB_URI || "mongodb+srv://frituMA3wuxUBrLXl1re:11lBr2phenuwrebopher@cluster0.sz3esol.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0",
-    dbName: "test",
+    uri: "mongodb+srv://frituMA3wuxUBrLXl1re:11lBr2phenuwrebopher@cluster0.sz3esol.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+    dbName: "test", // Ajusta según el nombre real de tu DB
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       maxPoolSize: 5,
-      serverSelectionTimeoutMS: 10000, // Aumentado para Vercel
+      serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
-      bufferCommands: false,
-      family: 4 // Forzar IPv4
     }
   }
 };
@@ -45,77 +39,23 @@ const DB_CONFIGS = {
  */
 async function connectToMainDB() {
   if (mainDbConnection && mainDbConnection.readyState === 1) {
-    console.log("✅ Reutilizando conexión principal existente");
     return mainDbConnection;
   }
 
   try {
     console.log("🔄 Conectando a la base de datos principal...");
-    
-    // Verificar que la URI existe
-    if (!DB_CONFIGS.main.uri) {
-      throw new Error("MONGODB_URI no está definida en las variables de entorno");
-    }
-    
-    // Log parcial de la URI (por seguridad)
-    const uriParts = DB_CONFIGS.main.uri.split('@');
-    console.log("📍 Conectando a:", uriParts.length > 1 ? `***@${uriParts[1]}` : 'URI inválida');
-    
     mainDbConnection = await mongoose.createConnection(
       DB_CONFIGS.main.uri, 
-      DB_CONFIGS.main.options
+      {
+        ...DB_CONFIGS.main.options,
+        dbName: DB_CONFIGS.main.dbName
+      }
     );
     
-    // Configurar eventos
-    mainDbConnection.on('connected', () => {
-      console.log("✅ Base de datos principal conectada exitosamente");
-    });
-    
-    mainDbConnection.on('error', (err) => {
-      console.error("❌ Error en conexión principal:", err.message);
-      console.error("Detalles:", err);
-    });
-    
-    mainDbConnection.on('disconnected', () => {
-      console.log("⚠️ Base de datos principal desconectada");
-    });
-    
-    // Esperar a que la conexión se establezca
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Timeout conectando a DB principal (10s)'));
-      }, 10000);
-      
-      mainDbConnection.once('connected', () => {
-        clearTimeout(timeout);
-        resolve(true);
-      });
-      
-      mainDbConnection.once('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-    });
-    
-    console.log("✅ Conexión principal establecida");
+    console.log("✅ Conectado a la base de datos principal");
     return mainDbConnection;
-    
   } catch (error) {
-    console.error("❌ Error conectando a la base de datos principal:");
-    console.error("Tipo:", error.constructor.name);
-    console.error("Mensaje:", error.message);
-    console.error("Stack:", error.stack);
-    
-    // Información adicional de debug
-    if (error.message.includes('ENOTFOUND')) {
-      console.error("🔍 El servidor MongoDB no se puede encontrar. Verifica la URI.");
-    } else if (error.message.includes('authentication')) {
-      console.error("🔐 Error de autenticación. Verifica usuario y contraseña.");
-    } else if (error.message.includes('timeout')) {
-      console.error("⏱️ Timeout de conexión. El servidor puede estar inaccesible.");
-    }
-    
-    mainDbConnection = null;
+    console.error("❌ Error conectando a la base de datos principal:", error);
     throw error;
   }
 }
@@ -125,61 +65,23 @@ async function connectToMainDB() {
  */
 async function connectToProductsDB() {
   if (productsDbConnection && productsDbConnection.readyState === 1) {
-    console.log("✅ Reutilizando conexión de productos existente");
     return productsDbConnection;
   }
 
   try {
     console.log("🔄 Conectando a la base de datos de productos...");
-    
-    // Log parcial de la URI
-    const uriParts = DB_CONFIGS.products.uri.split('@');
-    console.log("📍 Conectando a productos:", uriParts.length > 1 ? `***@${uriParts[1]}` : 'URI inválida');
-    
     productsDbConnection = await mongoose.createConnection(
       DB_CONFIGS.products.uri,
-      DB_CONFIGS.products.options
+      {
+        ...DB_CONFIGS.products.options,
+        dbName: DB_CONFIGS.products.dbName
+      }
     );
     
-    // Configurar eventos
-    productsDbConnection.on('connected', () => {
-      console.log("✅ Base de datos de productos conectada exitosamente");
-    });
-    
-    productsDbConnection.on('error', (err) => {
-      console.error("❌ Error en conexión de productos:", err.message);
-    });
-    
-    productsDbConnection.on('disconnected', () => {
-      console.log("⚠️ Base de datos de productos desconectada");
-    });
-    
-    // Esperar a que la conexión se establezca
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Timeout conectando a DB de productos (10s)'));
-      }, 10000);
-      
-      productsDbConnection.once('connected', () => {
-        clearTimeout(timeout);
-        resolve(true);
-      });
-      
-      productsDbConnection.once('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-    });
-    
-    console.log("✅ Conexión de productos establecida");
+    console.log("✅ Conectado a la base de datos de productos");
     return productsDbConnection;
-    
   } catch (error) {
-    console.error("❌ Error conectando a la base de datos de productos:");
-    console.error("Tipo:", error.constructor.name);
-    console.error("Mensaje:", error.message);
-    
-    productsDbConnection = null;
+    console.error("❌ Error conectando a la base de datos de productos:", error);
     throw error;
   }
 }
@@ -188,43 +90,16 @@ async function connectToProductsDB() {
  * Inicializa ambas conexiones
  */
 async function initializeConnections() {
-  console.log("🚀 Iniciando conexiones a MongoDB...");
-  console.log("📍 Entorno:", process.env.NODE_ENV || 'development');
-  console.log("📍 Variables de entorno disponibles:", Object.keys(process.env).filter(k => k.includes('MONGO')));
-  
-  const results = {
-    main: { success: false, error: null },
-    products: { success: false, error: null }
-  };
-  
-  // Intentar conectar a la DB principal
   try {
-    await connectToMainDB();
-    results.main.success = true;
+    await Promise.all([
+      connectToMainDB(),
+      connectToProductsDB()
+    ]);
+    console.log("🚀 Todas las bases de datos conectadas exitosamente");
   } catch (error) {
-    results.main.error = error.message;
-    console.error("⚠️ No se pudo conectar a la DB principal, continuando...");
+    console.error("💥 Error inicializando las conexiones:", error);
+    throw error;
   }
-  
-  // Intentar conectar a la DB de productos
-  try {
-    await connectToProductsDB();
-    results.products.success = true;
-  } catch (error) {
-    results.products.error = error.message;
-    console.error("⚠️ No se pudo conectar a la DB de productos, continuando...");
-  }
-  
-  // Resumen de conexiones
-  console.log("\n📊 Resumen de conexiones:");
-  console.log("Principal:", results.main.success ? "✅ Conectada" : `❌ Error: ${results.main.error}`);
-  console.log("Productos:", results.products.success ? "✅ Conectada" : `❌ Error: ${results.products.error}`);
-  
-  if (!results.main.success && !results.products.success) {
-    throw new Error("No se pudo conectar a ninguna base de datos");
-  }
-  
-  console.log("\n🎉 Conexiones inicializadas (parcial o completamente)");
 }
 
 /**
@@ -244,13 +119,11 @@ function getConnectionStatus() {
   return {
     main: {
       status: statusMap[mainStatus] || "unknown",
-      dbName: DB_CONFIGS.main.dbName,
-      readyState: mainStatus
+      dbName: DB_CONFIGS.main.dbName
     },
     products: {
       status: statusMap[productsStatus] || "unknown", 
-      dbName: DB_CONFIGS.products.dbName,
-      readyState: productsStatus
+      dbName: DB_CONFIGS.products.dbName
     }
   };
 }
@@ -262,24 +135,24 @@ function setupConnectionHandlers() {
   // Handlers para la DB principal
   if (mainDbConnection) {
     mainDbConnection.on('error', (err) => {
-      console.error('❌ Error en DB principal:', err.message);
+      console.error('❌ Error en DB principal:', err);
     });
     
     mainDbConnection.on('disconnected', () => {
-      console.log('⚠️ DB principal desconectada');
-      mainDbConnection = null; // Limpiar conexión
+      console.log('⚠️ DB principal desconectada, reintentando...');
+      setTimeout(connectToMainDB, 5000);
     });
   }
   
   // Handlers para la DB de productos
   if (productsDbConnection) {
     productsDbConnection.on('error', (err) => {
-      console.error('❌ Error en DB de productos:', err.message);
+      console.error('❌ Error en DB de productos:', err);
     });
     
     productsDbConnection.on('disconnected', () => {
-      console.log('⚠️ DB de productos desconectada');
-      productsDbConnection = null; // Limpiar conexión
+      console.log('⚠️ DB de productos desconectada, reintentando...');
+      setTimeout(connectToProductsDB, 5000);
     });
   }
 }

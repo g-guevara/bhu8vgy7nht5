@@ -9,140 +9,28 @@ const router = express.Router();
 
 // =================== RUTAS DE PRODUCTOS (DB PRODUCTOS) ===================
 
-// Endpoint para listar colecciones en la base de datos de productos
-router.get("/products/list-collections", async (req, res) => {
-  console.log("📋 Listando colecciones en base de datos de productos...");
-  
-  try {
-    const { getProductsConnection } = require('./mongoConnections');
-    const connection = getProductsConnection();
-    
-    if (!connection || connection.readyState !== 1) {
-      return res.status(503).json({
-        error: "Products database not connected",
-        message: "No hay conexión activa a la base de datos de productos"
-      });
-    }
-    
-    // Listar colecciones
-    console.log("🔍 Obteniendo lista de colecciones...");
-    const collections = await connection.db.listCollections().toArray();
-    console.log(`📚 Colecciones encontradas: ${collections.length}`);
-    
-    const collectionNames = collections.map(col => ({
-      name: col.name,
-      type: col.type
-    }));
-    
-    console.log("📋 Nombres de colecciones:", collectionNames.map(c => c.name));
-    
-    res.json({
-      status: "✅ Colecciones listadas",
-      database: connection.db.databaseName,
-      collections: collectionNames,
-      totalCollections: collections.length,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error("❌ Error listando colecciones:", error);
-    res.status(500).json({
-      error: "Failed to list collections",
-      message: error.message,
-      type: error.constructor.name
-    });
-  }
-});
-
-// Endpoint de prueba para verificar conexión a productos
-router.get("/products/test-connection", async (req, res) => {
-  console.log("🧪 Probando conexión a base de datos de productos...");
-  
-  try {
-    const { getConnectionStatus } = require('./mongoConnections');
-    const status = getConnectionStatus();
-    
-    console.log("📊 Estado de conexiones:", status);
-    
-    if (status.products.status !== 'connected') {
-      return res.status(503).json({
-        error: "Products database not connected",
-        status: status.products,
-        message: `Base de datos de productos en estado: ${status.products.status}`
-      });
-    }
-    
-    // Intentar obtener el modelo
-    console.log("🔄 Obteniendo modelo Product...");
-    const Product = await getModel('Product');
-    console.log("✅ Modelo Product obtenido");
-    
-    // Intentar contar documentos
-    console.log("📊 Contando productos...");
-    const count = await Product.countDocuments();
-    console.log(`📦 Total de productos: ${count}`);
-    
-    // Intentar obtener un producto de muestra
-    console.log("🔍 Obteniendo producto de muestra...");
-    const sampleProduct = await Product.findOne().lean();
-    console.log("✅ Producto de muestra obtenido");
-    
-    res.json({
-      status: "✅ Conexión exitosa",
-      database: status.products,
-      totalProducts: count,
-      sampleProduct: sampleProduct ? {
-        code: sampleProduct.code,
-        product_name: sampleProduct.product_name,
-        brands: sampleProduct.brands
-      } : null,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error("❌ Error en test de conexión:", error);
-    res.status(500).json({
-      error: "Connection test failed",
-      message: error.message,
-      type: error.constructor.name,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
 // Buscar productos - Endpoint principal para el SearchComponent
 router.get("/products/search", async (req, res) => {
-  console.log("🔍 Iniciando búsqueda de productos");
-  console.log("📝 Query params:", req.query);
-  
   try {
     const { q, page = 1, limit = 15 } = req.query;
-    
-    console.log("🔄 Obteniendo modelo Product...");
     const Product = await getModel('Product');
-    console.log("✅ Modelo Product obtenido");
     
     let query = {};
     
     // Si hay término de búsqueda, usar texto completo
     if (q && q.trim()) {
-      console.log(`🔎 Búsqueda con término: "${q}"`);
       query = {
         $text: { 
           $search: q.trim(),
           $caseSensitive: false
         }
       };
-    } else {
-      console.log("📋 Búsqueda sin término (todos los productos)");
     }
     
     // Calcular skip para paginación
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    console.log(`📄 Paginación: página ${page}, límite ${limit}, skip ${skip}`);
     
     // Ejecutar búsqueda con paginación
-    console.log("🔍 Ejecutando consulta a MongoDB...");
     const [products, total] = await Promise.all([
       Product.find(query)
         .skip(skip)
@@ -151,8 +39,6 @@ router.get("/products/search", async (req, res) => {
       Product.countDocuments(query)
     ]);
     
-    console.log(`📊 Resultados: ${products.length} productos encontrados de ${total} total`);
-    
     // Normalizar los datos (convertir code a string si es necesario)
     const normalizedProducts = products.map(product => ({
       code: product.code.toString(),
@@ -160,8 +46,6 @@ router.get("/products/search", async (req, res) => {
       brands: product.brands || '',
       ingredients_text: product.ingredients_text || ''
     }));
-    
-    console.log("✅ Búsqueda completada exitosamente");
     
     res.json({
       products: normalizedProducts,
@@ -173,13 +57,8 @@ router.get("/products/search", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error searching products:', error);
-    console.error('📋 Stack trace:', error.stack);
-    res.status(500).json({ 
-      error: error.message,
-      type: error.constructor.name,
-      details: "Error al buscar productos en la base de datos"
-    });
+    console.error('Error searching products:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
