@@ -1,5 +1,4 @@
 // app/navigation/AppNavigator.tsx
-//test
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -64,7 +63,7 @@ export default function AppNavigator({ user, onLogout }: AppNavigatorProps) {
         name="Home"
         options={{
           tabBarIcon: ({ focused, color, size }: TabBarIconProps) => (
-            <Ionicons
+            <MaterialIcons
               name="home"
               size={size}
               color={focused ? '#4285F4' : '#888'}
@@ -77,6 +76,24 @@ export default function AppNavigator({ user, onLogout }: AppNavigatorProps) {
       >
         {() => <HomeScreen user={user} onLogout={onLogout} />}
       </Tab.Screen>
+
+
+      <Tab.Screen
+        name="Wishlist"
+        component={WishlistScreen}
+        options={{
+          tabBarIcon: ({ focused, color, size }: TabBarIconProps) => (
+            <MaterialIcons
+              name="bookmark"
+              size={size}
+              color={focused ? '#4285F4' : '#888'}
+            />
+          ),
+          tabBarLabel: ({ focused }: { focused: boolean }) => (
+            <TabLabel label="Wishlist" focused={focused} />
+          ),
+        }}
+      />
 
       <Tab.Screen
         name="Test"
@@ -112,22 +129,7 @@ export default function AppNavigator({ user, onLogout }: AppNavigatorProps) {
         }}
       />
 
-      <Tab.Screen
-        name="Wishlist"
-        component={WishlistScreen}
-        options={{
-          tabBarIcon: ({ focused, color, size }: TabBarIconProps) => (
-            <MaterialIcons
-              name="bookmark"
-              size={size}
-              color={focused ? '#4285F4' : '#888'}
-            />
-          ),
-          tabBarLabel: ({ focused }: { focused: boolean }) => (
-            <TabLabel label="Wishlist" focused={focused} />
-          ),
-        }}
-      />
+
     </Tab.Navigator>
   );
 }

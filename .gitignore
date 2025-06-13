@@ -31,6 +31,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +40,8 @@ app-example
 assets/source/reduced_opff.csv
 assets/source/OPFF.jsonl
 app/data/productData.ts
+app/data
+app/config/google0Auth.ts
+app/config/googleOAuth.ts
+app/config/googleOAuth.ts
+/app/config

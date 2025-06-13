@@ -238,7 +238,7 @@ export default function ProductInfoScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={28} color="#007AFF" />
+            <Ionicons name="chevron-back" size={28} color="#000" />
             <Text style={styles.backText}>Home</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
@@ -256,7 +256,7 @@ export default function ProductInfoScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={28} color="#007AFF" />
+            <Ionicons name="chevron-back" size={28} color="#000" />
             <Text style={styles.backText}>Home</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
@@ -276,7 +276,7 @@ export default function ProductInfoScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#007AFF" />
+          <Ionicons name="chevron-back" size={28} color="#000" />
           <Text style={styles.backText}>Home</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Information</Text>
@@ -293,7 +293,9 @@ export default function ProductInfoScreen() {
           <ProductDetails product={product} />
           
           <View style={styles.divider} />
-          
+                    {/* Component 5: Product Actions (Wishlist and Test buttons) */}
+          <ProductActions product={product} />
+                    <View style={styles.divider} />
           {/* Component 3: Product Reactions */}
           <ProductReactions 
             selectedReaction={selectedReaction} 
@@ -314,7 +316,7 @@ export default function ProductInfoScreen() {
           />
           
           {/* Component 5: Product Actions (Wishlist and Test buttons) */}
-          <ProductActions product={product} />
+          {/* <ProductActions product={product} /> */}
         </View>
       </ScrollView>
     </SafeAreaView>

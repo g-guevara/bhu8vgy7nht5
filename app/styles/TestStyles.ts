@@ -5,23 +5,30 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+
+    headerSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 50,
+    marginBottom: 20,
+  },
   headerText: {
     fontSize: 36,
     fontWeight: 'bold',
-    marginTop: 50,
-    marginBottom: 20,
-    paddingHorizontal: 20,
   },
+
   calendarContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginBottom: 20,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E5E5E5',
-    paddingVertical: 10,
   },
+
+
+
+
   dayItem: {
     alignItems: 'center',
     padding: 5,
@@ -48,33 +55,35 @@ export const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
+  // 🔄 CÍRCULOS PERFECTOS PARA LAS FECHAS
   dateCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // ✅ Círculo perfecto (width/2)
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent', // Sin background por defecto
   },
   selectedDateCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // ✅ Círculo perfecto
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#007AFF',
   },
   testDateCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // ✅ Círculo perfecto
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#E8F0FF', // Light blue background
   },
   todayCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // ✅ Círculo perfecto
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#007AFF',
@@ -88,7 +97,7 @@ export const styles = StyleSheet.create({
   currentTestContainer: {
     backgroundColor: '#E8F0FF',
     marginHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 15, // ✅ Reducido de 30 a 15 para menos espacio
     borderRadius: 15,
     padding: 20,
   },
@@ -221,4 +230,40 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   
+  // Calendar section styles
+  calendarSection: {
+    position: 'relative',
+  },
+  seeCalendarButton: {
+    position: 'absolute',
+    right: 20,
+    top: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  seeCalendarText: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 4,
+  },
+  seeCalendarArrow: {
+    fontSize: 16,
+    color: '#666',
+  },
+  
+  // ✅ NOTIFICACIÓN DE LÍMITE DE TEST ACTUALIZADA
+  testLimitNotification: {
+    marginHorizontal: 20,
+    marginTop: 5, // ✅ Reducido de 10 a 5 para menos padding
+    marginBottom: 10, // ✅ Agregado para equilibrar el espaciado
+    paddingHorizontal: 12, // ✅ Solo padding horizontal
+    paddingVertical: 8, // ✅ Padding vertical mínimo
+    // ✅ Sin backgroundColor (removido)
+  },
+  testLimitText: {
+    fontSize: 12,
+    color: '#8E8E93', // ✅ Cambiado de '#007AFF' a gris
+    textAlign: 'center',
+    fontStyle: 'italic', // ✅ Agregado para darle un toque más sutidsfsdfl
+  },
 });
