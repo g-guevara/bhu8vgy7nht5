@@ -1,11 +1,19 @@
-// app/components/Home/SearchComponent.tsx - Actualizado para usar MongoDB API
-import React, { useState, useEffect, useRef } from 'react';
+// app/components/Home/SearchComponent.tsx - ACTUALIZADO CON API DE OPENFOODFACTS
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+// Temporal: usar los datos actuales hasta crear el nuevo archivo
+
+
+import { sampleProducts, Product } from '../../data/productData';
+
+
 import { searchStyles } from '../../styles/HomeComponentStyles';
-import { ApiService, Product } from '../../services/api';
+
+// La interfaz Product ya está definida en productData.ts con exactamente 3 campos
+// No necesitamos redefinirla aquí
 
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
@@ -18,14 +26,14 @@ interface HistoryItem {
 
 // Extender Product para incluir campos adicionales para el cache de imágenes
 interface ProductWithImage extends Product {
-  image_url?: string;
-  imageLoading?: boolean;
+  image_url?: string; // Campo opcional para la imagen cacheada
+  imageLoading?: boolean; // Campo opcional para el estado de carga
 }
 
 const HISTORY_KEY = 'product_history';
 const IMAGE_CACHE_KEY = 'product_images_cache';
 const MAX_HISTORY_ITEMS = 2;
-const RESULTS_PER_PAGE = 10;
+const RESULTS_PER_PAGE = 15;
 
 // OpenFoodFacts API URL
 const OPENFOODFACTS_API = 'https://world.openfoodfacts.org/api/v0/product';
@@ -37,16 +45,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const [displayedResults, setDisplayedResults] = useState<ProductWithImage[]>([]);
   const [historyItems, setHistoryItems] = useState<ProductWithImage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [loadingSearch, setLoadingSearch] = useState(false);
   const [imageCache, setImageCache] = useState<Record<string, string>>({});
   
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
-
-  // Ref para cancelar búsquedas anteriores
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadHistoryFromStorage();
@@ -131,6 +135,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         return fileUri;
       }
       
+      // Descargar imagen
       console.log(`Downloading image for product ${productCode}...`);
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
       
@@ -216,17 +221,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           new Date(b.viewedAt).getTime() - new Date(a.viewedAt).getTime()
         );
 
-        // Cargar productos desde la API usando los códigos del historial
-        const historyProducts: ProductWithImage[] = [];
-        
-        for (const historyItem of sortedHistory.slice(0, MAX_HISTORY_ITEMS)) {
-          try {
-            const product = await ApiService.getProductByCode(historyItem.code);
-            historyProducts.push(product as ProductWithImage);
-          } catch (error) {
-            console.error(`Error loading product ${historyItem.code} from history:`, error);
-          }
-        }
+        const historyProducts = sortedHistory
+          .map(historyItem => sampleProducts.find(product => product.code === historyItem.code))
+          .filter(product => product !== undefined)
+          .slice(0, MAX_HISTORY_ITEMS) as ProductWithImage[];
 
         setHistoryItems(historyProducts);
         
@@ -276,53 +274,27 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  const handleSearch = async (text: string) => {
+  const handleSearch = (text: string) => {
     setSearchText(text);
-
-    // Limpiar timeout anterior
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
 
     if (text.trim() === '') {
       setAllSearchResults([]);
       setCurrentPage(1);
-      setLoadingSearch(false);
-      return;
-    }
+    } else {
+      // Buscar solo por product_name y brands (exactamente como solicitaste)
+      const filtered = sampleProducts.filter(product =>
+        product.product_name.toLowerCase().includes(text.toLowerCase()) ||
+        product.brands.toLowerCase().includes(text.toLowerCase())
+      ) as ProductWithImage[];
 
-    setLoadingSearch(true);
-
-    // Debounce la búsqueda para evitar demasiadas llamadas a la API
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        console.log(`🔍 Searching for: "${text}"`);
-        
-        // Usar la API de productos de MongoDB
-        const response = await ApiService.searchProducts(text, 1, 50); // Obtener más resultados para paginación local
-        
-        console.log(`📊 Found ${response.products.length} products`);
-        
-        const productsWithImages = response.products.map(product => ({
-          ...product,
-          image_url: undefined,
-          imageLoading: false
-        })) as ProductWithImage[];
-
-        setAllSearchResults(productsWithImages);
-        setCurrentPage(1);
-        
-        // Cargar imágenes para los resultados de búsqueda
-        if (productsWithImages.length > 0) {
-          loadImagesForProducts(productsWithImages);
-        }
-      } catch (error) {
-        console.error('Error searching products:', error);
-        setAllSearchResults([]);
-      } finally {
-        setLoadingSearch(false);
+      setAllSearchResults(filtered);
+      setCurrentPage(1);
+      
+      // Cargar imágenes para los resultados de búsqueda
+      if (filtered.length > 0) {
+        loadImagesForProducts(filtered);
       }
-    }, 300); // 300ms de debounce
+    }
   };
 
   const handlePageChange = (newPage: number) => {
@@ -498,23 +470,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             }
           }}
         />
-        {(searchText || loadingSearch) ? (
+        {searchText ? (
           <TouchableOpacity
             style={searchStyles.clearButton}
             onPress={() => {
-              if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-              }
               handleSearch('');
               onFocusChange(false);
-              setLoadingSearch(false);
             }}
           >
-            {loadingSearch ? (
-              <ActivityIndicator size="small" color="#666" />
-            ) : (
-              <Text style={searchStyles.clearButtonText}>✕</Text>
-            )}
+            <Text style={searchStyles.clearButtonText}>✕</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -536,15 +500,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             {displayedResults.map(product => renderProductItem(product))}
             {renderPaginationControls()}
           </>
-        ) : searchText && allSearchResults.length === 0 && !loadingSearch ? (
+        ) : searchText && allSearchResults.length === 0 ? (
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>Try a different search term</Text>
-          </View>
-        ) : searchText && loadingSearch ? (
-          <View style={searchStyles.noResultsContainer}>
-            <ActivityIndicator size="large" color="#000000" />
-            <Text style={{ marginTop: 10, color: '#666' }}>Searching products...</Text>
           </View>
         ) : loadingHistory ? (
           <View style={searchStyles.noResultsContainer}>

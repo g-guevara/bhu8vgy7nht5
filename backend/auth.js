@@ -1,5 +1,4 @@
-// backend/auth.js - Actualizado para usar los nuevos modelos
-const { getModel } = require('./models');
+const { User } = require('./models');
 
 // Simple ID-based Authentication Middleware
 const authenticateUser = async (req, res, next) => {
@@ -17,9 +16,6 @@ const authenticateUser = async (req, res, next) => {
   }
 
   try {
-    // Obtener el modelo User de forma dinámica
-    const User = await getModel('User');
-    
     // Buscar usuario en la base de datos
     console.log('Buscando usuario con ID:', userId);
     const user = await User.findOne({ userID: userId });

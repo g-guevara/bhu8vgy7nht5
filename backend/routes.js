@@ -1,331 +1,20 @@
-// backend/routes.js - VERSIÓN COMPLETA OPTIMIZADA SIN CREACIÓN DE ÍNDICES
 const express = require("express");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
 const { authenticateUser } = require('./auth');
-const { getModel } = require('./models');
+const {
+  User,
+  Article,
+  History,
+  ProductIngredient,
+  ProductNote,
+  Wishlist,
+  Test,
+  ProductReaction,
+  IngredientReaction
+} = require('./models');
 
 const router = express.Router();
-
-// =================== BÚSQUEDA OPTIMIZADA DE PRODUCTOS ===================
-
-/**
- * Búsqueda optimizada usando los índices pre-creados
- * Ya NO crea/verifica índices en runtime
- */
-async function optimizedProductSearch(Product, searchTerm, page, limit) {
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  
-  // Crear consulta optimizada usando los índices compound
-  const searchQuery = {
-    $or: [
-      { 
-        product_name: { 
-          $regex: searchTerm, 
-          $options: 'i' 
-        } 
-      },
-      { 
-        brands: { 
-          $regex: searchTerm, 
-          $options: 'i' 
-        } 
-      }
-    ]
-  };
-  
-  console.log(`🔍 Búsqueda: "${searchTerm}" (página ${page})`);
-  const startTime = Date.now();
-  
-  try {
-    // Usar Promise.all para paralelizar count y find
-    const [products, total] = await Promise.all([
-      Product
-        .find(searchQuery)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean() // Más rápido que objetos Mongoose completos
-        .exec(),
-      Product.countDocuments(searchQuery).exec()
-    ]);
-    
-    const endTime = Date.now();
-    console.log(`⚡ Búsqueda completada en ${endTime - startTime}ms (${total} resultados)`);
-    
-    return { products, total };
-  } catch (error) {
-    console.error(`❌ Error en búsqueda optimizada:`, error);
-    throw error;
-  }
-}
-
-/**
- * Búsqueda para productos recientes (sin término de búsqueda)
- */
-async function getRecentProducts(Product, page, limit) {
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  
-  console.log(`📄 Obteniendo productos recientes (página ${page})`);
-  const startTime = Date.now();
-  
-  try {
-    // Usar solo los campos necesarios para mejor rendimiento
-    const [products, total] = await Promise.all([
-      Product
-        .find({})
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean()
-        .exec(),
-      Product.estimatedDocumentCount() // Más rápido que countDocuments para totales
-    ]);
-    
-    const endTime = Date.now();
-    console.log(`⚡ Productos recientes obtenidos en ${endTime - startTime}ms`);
-    
-    return { products, total };
-  } catch (error) {
-    console.error(`❌ Error obteniendo productos recientes:`, error);
-    throw error;
-  }
-}
-
-// =================== RUTAS DE PRODUCTOS OPTIMIZADAS ===================
-
-// Buscar productos - VERSIÓN SÚPER OPTIMIZADA
-router.get("/products/search", async (req, res) => {
-  try {
-    const { q, page = 1, limit = 15 } = req.query;
-    const Product = await getModel('Product');
-    
-    let products = [];
-    let total = 0;
-    let searchMethod = 'empty';
-    
-    // Validar parámetros
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit))); // Máximo 50 por página
-    
-    if (!q || !q.trim()) {
-      // Sin término de búsqueda: productos recientes
-      const result = await getRecentProducts(Product, pageNum, limitNum);
-      products = result.products;
-      total = result.total;
-      searchMethod = 'recent';
-    } else {
-      // Con término de búsqueda: usar búsqueda optimizada
-      const searchTerm = q.trim();
-      const result = await optimizedProductSearch(Product, searchTerm, pageNum, limitNum);
-      products = result.products;
-      total = result.total;
-      searchMethod = 'optimized_search';
-    }
-    
-    // Normalizar datos de manera eficiente
-    const normalizedProducts = products.map(product => ({
-      code: String(product.code), // Más rápido que toString()
-      product_name: product.product_name || '',
-      brands: product.brands || '',
-      ingredients_text: product.ingredients_text || ''
-    }));
-    
-    res.json({
-      products: normalizedProducts,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum)
-      },
-      meta: {
-        searchMethod,
-        query: q || null,
-        resultsCount: normalizedProducts.length,
-        cached: false // Para futuras optimizaciones de cache
-      }
-    });
-    
-  } catch (error) {
-    console.error('💥 Error en búsqueda de productos:', error);
-    res.status(500).json({ 
-      error: "Error en la búsqueda de productos",
-      code: "SEARCH_ERROR",
-      message: "La búsqueda falló. Por favor, intenta con términos diferentes."
-    });
-  }
-});
-
-// Obtener producto por código - OPTIMIZADO
-router.get("/products/:code", async (req, res) => {
-  try {
-    const { code } = req.params;
-    
-    if (!code || code.trim() === '') {
-      return res.status(400).json({ 
-        error: "Código de producto requerido",
-        code: "MISSING_CODE"
-      });
-    }
-    
-    const Product = await getModel('Product');
-    
-    console.log(`🔍 Buscando producto: ${code}`);
-    const startTime = Date.now();
-    
-    // Usar el índice único de code
-    const product = await Product
-      .findOne({ code: code })
-      .lean()
-      .exec();
-    
-    const endTime = Date.now();
-    console.log(`⚡ Búsqueda por código completada en ${endTime - startTime}ms`);
-    
-    if (!product) {
-      return res.status(404).json({ 
-        error: "Producto no encontrado",
-        code: "PRODUCT_NOT_FOUND"
-      });
-    }
-    
-    // Normalizar producto
-    const normalizedProduct = {
-      code: String(product.code),
-      product_name: product.product_name || '',
-      brands: product.brands || '',
-      ingredients_text: product.ingredients_text || ''
-    };
-    
-    res.json(normalizedProduct);
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo producto por código:', error);
-    res.status(500).json({ 
-      error: "Error obteniendo el producto",
-      code: "GET_PRODUCT_ERROR"
-    });
-  }
-});
-
-// Productos por categoría - OPTIMIZADO
-router.get("/products/category/:brand", async (req, res) => {
-  try {
-    const { brand } = req.params;
-    const { organic = false } = req.query;
-    
-    if (!brand || brand.trim() === '') {
-      return res.status(400).json({ 
-        error: "Marca/categoría requerida",
-        code: "MISSING_BRAND"
-      });
-    }
-    
-    const Product = await getModel('Product');
-    
-    console.log(`🏷️ Buscando productos de marca: ${brand} (organic: ${organic})`);
-    const startTime = Date.now();
-    
-    // Construir query optimizada
-    let query = {
-      brands: new RegExp(brand, 'i')
-    };
-    
-    // Si se solicitan orgánicos, usar el índice partial
-    if (organic === 'true') {
-      query.code = /^SSS/;
-    }
-    
-    const products = await Product
-      .find(query)
-      .limit(100) // Límite razonable
-      .lean()
-      .exec();
-    
-    const endTime = Date.now();
-    console.log(`⚡ Productos por categoría obtenidos en ${endTime - startTime}ms (${products.length} resultados)`);
-    
-    // Normalizar productos
-    const normalizedProducts = products.map(product => ({
-      code: String(product.code),
-      product_name: product.product_name || '',
-      brands: product.brands || '',
-      ingredients_text: product.ingredients_text || ''
-    }));
-    
-    res.json(normalizedProducts);
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo productos por categoría:', error);
-    res.status(500).json({ 
-      error: "Error obteniendo productos por categoría",
-      code: "CATEGORY_ERROR"
-    });
-  }
-});
-
-// Estadísticas - OPTIMIZADO
-router.get("/products/stats", async (req, res) => {
-  try {
-    const Product = await getModel('Product');
-    
-    console.log("📊 Obteniendo estadísticas de productos...");
-    const startTime = Date.now();
-    
-    // Usar estimatedDocumentCount para el total (más rápido)
-    const [total, organic, withIngredients] = await Promise.all([
-      Product.estimatedDocumentCount(),
-      Product.countDocuments({ code: /^SSS/ }),
-      Product.countDocuments({ 
-        ingredients_text: { $exists: true, $ne: '' } 
-      })
-    ]);
-    
-    const endTime = Date.now();
-    console.log(`⚡ Estadísticas obtenidas en ${endTime - startTime}ms`);
-    
-    res.json({
-      total,
-      organic,
-      withIngredients,
-      regular: total - organic,
-      generated_at: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error obteniendo estadísticas:', error);
-    res.status(500).json({ 
-      error: "Error obteniendo estadísticas",
-      code: "STATS_ERROR"
-    });
-  }
-});
-
-// Endpoint para verificar índices (solo para debugging)
-router.get("/products/index-info", async (req, res) => {
-  try {
-    const Product = await getModel('Product');
-    const indexes = await Product.collection.getIndexes();
-    
-    const indexInfo = {
-      totalIndexes: Object.keys(indexes).length,
-      indexes: Object.keys(indexes).map(name => ({
-        name,
-        key: indexes[name].key,
-        unique: indexes[name].unique || false
-      }))
-    };
-    
-    res.json(indexInfo);
-  } catch (error) {
-    console.error('❌ Error obteniendo información de índices:', error);
-    res.status(500).json({ 
-      error: "Error obteniendo información de índices",
-      message: error.message 
-    });
-  }
-});
-
-// =================== RUTAS EXISTENTES (COMPLETAS) ===================
 
 // Ruta de prueba para POST
 router.post("/test", (req, res) => {
@@ -339,8 +28,7 @@ router.post("/test", (req, res) => {
 // Rutas de Usuarios
 router.get("/users", authenticateUser, async (req, res) => {
   try {
-    const User = await getModel('User');
-    const users = await User.find().select('-password');
+    const users = await User.find().select('-password'); // Excluir contraseñas
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -351,7 +39,6 @@ router.get("/users", authenticateUser, async (req, res) => {
 router.post("/users", async (req, res) => {
   try {
     const { name, email, password, language } = req.body;
-    const User = await getModel('User');
     
     // Validaciones de entrada
     if (!name || !email || !password) {
@@ -378,7 +65,7 @@ router.post("/users", async (req, res) => {
       });
     }
     
-    // Verificar si el usuario ya existe
+    // Verificar si el usuario ya existe - MENSAJE ESPECÍFICO
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(409).json({ 
@@ -412,6 +99,7 @@ router.post("/users", async (req, res) => {
   } catch (error) {
     console.error("Error en registro:", error);
     
+    // Manejo específico de errores de MongoDB
     if (error.code === 11000) {
       return res.status(409).json({ 
         error: "EMAIL_ALREADY_EXISTS",
@@ -419,6 +107,7 @@ router.post("/users", async (req, res) => {
       });
     }
     
+    // Error genérico del servidor
     res.status(500).json({ 
       error: "INTERNAL_SERVER_ERROR",
       message: "Error interno del servidor. Por favor, intenta más tarde."
@@ -426,12 +115,12 @@ router.post("/users", async (req, res) => {
   }
 });
 
-// LOGIN DE USUARIO
+// LOGIN DE USUARIO - VERSIÓN MEJORADA
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const User = await getModel('User');
     
+    // Validaciones de entrada
     if (!email || !password) {
       return res.status(400).json({ 
         error: "MISSING_CREDENTIALS",
@@ -439,6 +128,7 @@ router.post("/login", async (req, res) => {
       });
     }
     
+    // Buscar usuario (case insensitive)
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ 
@@ -447,6 +137,7 @@ router.post("/login", async (req, res) => {
       });
     }
     
+    // Verificar contraseña
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ 
@@ -455,6 +146,7 @@ router.post("/login", async (req, res) => {
       });
     }
     
+    // Remover contraseña de la respuesta
     const userResponse = user.toObject();
     delete userResponse.password;
     
@@ -471,11 +163,10 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// GOOGLE LOGIN
+// GOOGLE LOGIN - VERSIÓN MEJORADA
 router.post("/google-login", async (req, res) => {
   try {
-    const { email, name, googleId } = req.body;
-    const User = await getModel('User');
+    const { email, name, googleId, idToken, accessToken } = req.body;
     
     if (!email || !name || !googleId) {
       return res.status(400).json({ 
@@ -484,25 +175,29 @@ router.post("/google-login", async (req, res) => {
       });
     }
     
+    // Verificar si el usuario ya existe
     let user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
+      // Crear nuevo usuario con Google
       user = new User({
         userID: new mongoose.Types.ObjectId().toString(),
         name: name.trim(),
         email: email.toLowerCase().trim(),
-        password: await bcrypt.hash(googleId + Date.now(), 10),
+        password: await bcrypt.hash(googleId + Date.now(), 10), // Contraseña temporal
         language: "es",
         googleId: googleId,
         authProvider: 'google'
       });
       await user.save();
     } else if (!user.googleId) {
+      // Vincular cuenta existente con Google
       user.googleId = googleId;
       user.authProvider = 'google';
       await user.save();
     }
     
+    // Remover contraseña de la respuesta
     const userResponse = user.toObject();
     delete userResponse.password;
     
@@ -519,11 +214,124 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
-// =================== RUTAS DE WISHLIST ===================
+// Rutas de Artículos (protegidas)
+router.get("/articles", authenticateUser, async (req, res) => {
+  try {
+    const articles = await Article.find();
+    res.json(articles);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
+router.post("/articles", authenticateUser, async (req, res) => {
+  try {
+    const article = new Article(req.body);
+    await article.save();
+    res.status(201).json(article);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas de Historia (protegidas)
+router.get("/history", authenticateUser, async (req, res) => {
+  try {
+    const history = await History.find({ userID: req.user.userID });
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/history", authenticateUser, async (req, res) => {
+  try {
+    const history = new History({
+      ...req.body,
+      userID: req.user.userID
+    });
+    await history.save();
+    res.status(201).json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas de Ingredientes (protegidas)
+router.get("/productingredients", authenticateUser, async (req, res) => {
+  try {
+    const ingredients = await ProductIngredient.find();
+    res.json(ingredients);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/productingredients", authenticateUser, async (req, res) => {
+  try {
+    const ingredient = new ProductIngredient(req.body);
+    await ingredient.save();
+    res.status(201).json(ingredient);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas de Notas de Producto (protegidas)
+router.get("/productnotes", authenticateUser, async (req, res) => {
+  try {
+    const notes = await ProductNote.find({ userID: req.user.userID });
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/productnotes", authenticateUser, async (req, res) => {
+  try {
+    const note = new ProductNote({
+      ...req.body,
+      userID: req.user.userID
+    });
+    await note.save();
+    res.status(201).json(note);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update an existing product note
+router.put("/productnotes/:id", authenticateUser, async (req, res) => {
+  try {
+    const noteId = req.params.id;
+    const { note, rating } = req.body;
+    
+    // Find the note by ID and ensure it belongs to the authenticated user
+    const existingNote = await ProductNote.findOne({ 
+      _id: noteId,
+      userID: req.user.userID 
+    });
+    
+    if (!existingNote) {
+      return res.status(404).json({ error: "Note not found or not authorized to update" });
+    }
+    
+    // Update the note
+    existingNote.note = note;
+    if (rating !== undefined) {
+      existingNote.rating = rating;
+    }
+    
+    await existingNote.save();
+    res.json(existingNote);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas de Wishlist (protegidas)
 router.get("/wishlist", authenticateUser, async (req, res) => {
   try {
-    const Wishlist = await getModel('Wishlist');
     const wishlist = await Wishlist.find({ userID: req.user.userID });
     res.json(wishlist);
   } catch (error) {
@@ -533,7 +341,6 @@ router.get("/wishlist", authenticateUser, async (req, res) => {
 
 router.post("/wishlist", authenticateUser, async (req, res) => {
   try {
-    const Wishlist = await getModel('Wishlist');
     const item = new Wishlist({
       ...req.body,
       userID: req.user.userID
@@ -545,20 +352,22 @@ router.post("/wishlist", authenticateUser, async (req, res) => {
   }
 });
 
+// DELETE wishlist item endpoint
 router.delete("/wishlist/:id", authenticateUser, async (req, res) => {
   try {
-    const Wishlist = await getModel('Wishlist');
     const wishlistItemId = req.params.id;
     
+    // Find the wishlist item
     const wishlistItem = await Wishlist.findOne({ 
       _id: wishlistItemId,
-      userID: req.user.userID
+      userID: req.user.userID // Ensure the item belongs to the authenticated user
     });
     
     if (!wishlistItem) {
       return res.status(404).json({ error: "Wishlist item not found" });
     }
     
+    // Delete the item
     await Wishlist.deleteOne({ _id: wishlistItemId });
     
     res.json({ 
@@ -570,11 +379,9 @@ router.delete("/wishlist/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// =================== RUTAS DE TESTS ===================
-
+// Get user's active tests
 router.get("/tests", authenticateUser, async (req, res) => {
   try {
-    const Test = await getModel('Test');
     const tests = await Test.find({ userID: req.user.userID });
     res.json(tests);
   } catch (error) {
@@ -582,15 +389,16 @@ router.get("/tests", authenticateUser, async (req, res) => {
   }
 });
 
+// Start a new test
 router.post("/tests", authenticateUser, async (req, res) => {
   try {
     const { itemID } = req.body;
-    const Test = await getModel('Test');
     
     if (!itemID) {
       return res.status(400).json({ error: "Product ID is required" });
     }
     
+    // Check if there's already an active test for this product
     const existingTest = await Test.findOne({ 
       userID: req.user.userID,
       itemID,
@@ -601,9 +409,10 @@ router.post("/tests", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: "Test already in progress for this product" });
     }
     
+    // Create a new test with 3-day duration
     const startDate = new Date();
     const finishDate = new Date(startDate);
-    finishDate.setDate(finishDate.getDate() + 3);
+    finishDate.setDate(finishDate.getDate() + 3); // 3-day test
     
     const test = new Test({
       userID: req.user.userID,
@@ -620,11 +429,11 @@ router.post("/tests", authenticateUser, async (req, res) => {
   }
 });
 
+// Complete a test
 router.put("/tests/:id", authenticateUser, async (req, res) => {
   try {
     const testId = req.params.id;
     const { result } = req.body;
-    const Test = await getModel('Test');
     
     const test = await Test.findOne({ 
       _id: testId,
@@ -647,255 +456,28 @@ router.put("/tests/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// =================== RUTAS DE PRODUCT NOTES ===================
-
-router.get("/productnotes", authenticateUser, async (req, res) => {
-  try {
-    const ProductNote = await getModel('ProductNote');
-    const notes = await ProductNote.find({ userID: req.user.userID });
-    res.json(notes);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post("/productnotes", authenticateUser, async (req, res) => {
-  try {
-    const ProductNote = await getModel('ProductNote');
-    const note = new ProductNote({
-      ...req.body,
-      userID: req.user.userID
-    });
-    await note.save();
-    res.status(201).json(note);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.put("/productnotes/:id", authenticateUser, async (req, res) => {
-  try {
-    const noteId = req.params.id;
-    const { note, rating } = req.body;
-    const ProductNote = await getModel('ProductNote');
-    
-    const existingNote = await ProductNote.findOne({ 
-      _id: noteId,
-      userID: req.user.userID 
-    });
-    
-    if (!existingNote) {
-      return res.status(404).json({ error: "Note not found or not authorized to update" });
-    }
-    
-    existingNote.note = note;
-    if (rating !== undefined) {
-      existingNote.rating = rating;
-    }
-    
-    await existingNote.save();
-    res.json(existingNote);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// =================== RUTAS DE PRODUCT REACTIONS ===================
-
-router.get("/product-reactions", authenticateUser, async (req, res) => {
-  try {
-    const ProductReaction = await getModel('ProductReaction');
-    const reactions = await ProductReaction.find({ userID: req.user.userID });
-    res.json(reactions);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post("/product-reactions", authenticateUser, async (req, res) => {
-  try {
-    const { productID, reaction } = req.body;
-    const ProductReaction = await getModel('ProductReaction');
-    
-    let existingReaction = await ProductReaction.findOne({
-      userID: req.user.userID,
-      productID
-    });
-    
-    if (existingReaction) {
-      existingReaction.reaction = reaction;
-      await existingReaction.save();
-      res.json(existingReaction);
-    } else {
-      const newReaction = new ProductReaction({
-        userID: req.user.userID,
-        productID,
-        reaction
-      });
-      
-      await newReaction.save();
-      res.status(201).json(newReaction);
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.delete("/product-reactions/:productID", authenticateUser, async (req, res) => {
-  try {
-    const { productID } = req.params;
-    const ProductReaction = await getModel('ProductReaction');
-    
-    await ProductReaction.deleteOne({
-      userID: req.user.userID,
-      productID
-    });
-    
-    res.json({ message: "Reaction deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// =================== RUTAS DE INGREDIENT REACTIONS ===================
-
-router.get("/ingredient-reactions", authenticateUser, async (req, res) => {
-  console.log("[DEBUG] Received request for /ingredient-reactions");
-  console.log("[DEBUG] User ID:", req.user.userID);
-  
-  try {
-    const IngredientReaction = await getModel('IngredientReaction');
-    const reactions = await IngredientReaction.find({ userID: req.user.userID });
-    console.log("[DEBUG] Found ingredient reactions:", reactions.length);
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json(reactions);
-  } catch (error) {
-    console.error("[ERROR] Failed to fetch ingredient reactions:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post("/ingredient-reactions", authenticateUser, async (req, res) => {
-  try {
-    const { ingredientName, reaction } = req.body;
-    const IngredientReaction = await getModel('IngredientReaction');
-    
-    let existingReaction = await IngredientReaction.findOne({
-      userID: req.user.userID,
-      ingredientName
-    });
-    
-    if (existingReaction) {
-      existingReaction.reaction = reaction;
-      await existingReaction.save();
-      res.json(existingReaction);
-    } else {
-      const newReaction = new IngredientReaction({
-        userID: req.user.userID,
-        ingredientName,
-        reaction
-      });
-      
-      await newReaction.save();
-      res.status(201).json(newReaction);
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.delete("/ingredient-reactions/:ingredientName", authenticateUser, async (req, res) => {
-  try {
-    const { ingredientName } = req.params;
-    const IngredientReaction = await getModel('IngredientReaction');
-    
-    await IngredientReaction.deleteOne({
-      userID: req.user.userID,
-      ingredientName
-    });
-    
-    res.json({ message: "Ingredient reaction deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// =================== RUTAS DE UTILIDAD ===================
-
-// Rutas de Articles
-router.get("/articles", async (req, res) => {
-  try {
-    const Article = await getModel('Article');
-    const articles = await Article.find();
-    res.json(articles);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Rutas de History
-router.get("/history", authenticateUser, async (req, res) => {
-  try {
-    const History = await getModel('History');
-    const history = await History.find({ userID: req.user.userID });
-    res.json(history);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Verificación de token
-router.get("/verify-token", authenticateUser, (req, res) => {
-  res.json({ valid: true, user: req.user });
-});
-
-// Perfil de usuario
-router.get("/profile", authenticateUser, async (req, res) => {
-  try {
-    const User = await getModel('User');
-    const user = await User.findOne({ userID: req.user.userID }).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Cambiar contraseña
+// Change password endpoint
 router.post("/change-password", authenticateUser, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const User = await getModel('User');
     
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ 
-        error: "Current password and new password are required" 
-      });
-    }
-    
+    // Find user
     const user = await User.findOne({ userID: req.user.userID });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
     
+    // Verify current password
     const validPassword = await bcrypt.compare(currentPassword, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
     
-    if (newPassword.length < 8) {
-      return res.status(400).json({ 
-        error: "New password must be at least 8 characters long" 
-      });
-    }
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedNewPassword;
+    // Update password
+    user.password = hashedPassword;
     await user.save();
     
     res.json({ message: "Password changed successfully" });
@@ -904,18 +486,17 @@ router.post("/change-password", authenticateUser, async (req, res) => {
   }
 });
 
-// Actualizar período de prueba
+// Update trial period endpoint
 router.post("/update-trial-period", authenticateUser, async (req, res) => {
   try {
     const { trialDays } = req.body;
-    const User = await getModel('User');
     
+    // Validate trial days
     if (typeof trialDays !== 'number' || trialDays < 0) {
-      return res.status(400).json({ 
-        error: "Trial days must be a positive number" 
-      });
+      return res.status(400).json({ error: "Invalid trial days value" });
     }
     
+    // Find user and update
     const user = await User.findOne({ userID: req.user.userID });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -933,87 +514,180 @@ router.post("/update-trial-period", authenticateUser, async (req, res) => {
   }
 });
 
-// =================== DIAGNÓSTICO Y DEBUG ===================
+// Get user profile endpoint
+router.get("/profile", authenticateUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ userID: req.user.userID }).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// Diagnóstico mejorado
+// Get product reactions
+router.get("/product-reactions", authenticateUser, async (req, res) => {
+  try {
+    const reactions = await ProductReaction.find({ userID: req.user.userID });
+    res.json(reactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save product reaction
+router.post("/product-reactions", authenticateUser, async (req, res) => {
+  try {
+    const { productID, reaction } = req.body;
+    
+    // Check if reaction already exists for this product
+    let existingReaction = await ProductReaction.findOne({
+      userID: req.user.userID,
+      productID
+    });
+    
+    if (existingReaction) {
+      // Update existing reaction
+      existingReaction.reaction = reaction;
+      await existingReaction.save();
+      res.json(existingReaction);
+    } else {
+      // Create new reaction
+      const newReaction = new ProductReaction({
+        userID: req.user.userID,
+        productID,
+        reaction
+      });
+      
+      await newReaction.save();
+      res.status(201).json(newReaction);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete product reaction
+router.delete("/product-reactions/:productID", authenticateUser, async (req, res) => {
+  try {
+    const { productID } = req.params;
+    
+    await ProductReaction.deleteOne({
+      userID: req.user.userID,
+      productID
+    });
+    
+    res.json({ message: "Reaction deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save ingredient reaction
+router.post("/ingredient-reactions", authenticateUser, async (req, res) => {
+  try {
+    const { ingredientName, reaction } = req.body;
+    
+    // Check if reaction already exists for this ingredient
+    let existingReaction = await IngredientReaction.findOne({
+      userID: req.user.userID,
+      ingredientName
+    });
+    
+    if (existingReaction) {
+      // Update existing reaction
+      existingReaction.reaction = reaction;
+      await existingReaction.save();
+      res.json(existingReaction);
+    } else {
+      // Create new reaction
+      const newReaction = new IngredientReaction({
+        userID: req.user.userID,
+        ingredientName,
+        reaction
+      });
+      
+      await newReaction.save();
+      res.status(201).json(newReaction);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete ingredient reaction
+router.delete("/ingredient-reactions/:ingredientName", authenticateUser, async (req, res) => {
+  try {
+    const { ingredientName } = req.params;
+    
+    await IngredientReaction.deleteOne({
+      userID: req.user.userID,
+      ingredientName
+    });
+    
+    res.json({ message: "Ingredient reaction deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get ingredient reactions
+router.get("/ingredient-reactions", authenticateUser, async (req, res) => {
+  console.log("[DEBUG] Received request for /ingredient-reactions");
+  console.log("[DEBUG] User ID:", req.user.userID);
+  
+  try {
+    // Find all ingredient reactions for this user
+    const reactions = await IngredientReaction.find({ userID: req.user.userID });
+    console.log("[DEBUG] Found ingredient reactions:", reactions.length);
+    
+    // Ensure we're sending JSON content type
+    res.setHeader('Content-Type', 'application/json');
+    res.json(reactions);
+  } catch (error) {
+    console.error("[ERROR] Failed to fetch ingredient reactions:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify user (ruta de utilidad)
+router.get("/verify-token", authenticateUser, (req, res) => {
+  res.json({ valid: true, user: req.user });
+});
+
+// Diagnostic endpoint
 router.get("/diagnostico", async (req, res) => {
   try {
+    // Información del sistema
     const info = {
       serverTime: new Date().toISOString(),
-      nodeVersion: process.version
+      nodeVersion: process.version,
+      mongoConnection: mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado'
     };
     
-    let counts = {};
-    let productIndexInfo = {};
-    let error = null;
+    // Contar documentos en colecciones principales
+    const usuarios = await User.countDocuments();
+    const tests = await Test.countDocuments();
+    const wishlists = await Wishlist.countDocuments();
     
-    try {
-      // Contar documentos en DB principal
-      const User = await getModel('User');
-      const Test = await getModel('Test');
-      const Wishlist = await getModel('Wishlist');
-      const ProductReaction = await getModel('ProductReaction');
-      const IngredientReaction = await getModel('IngredientReaction');
-      
-      counts.usuarios = await User.countDocuments();
-      counts.tests = await Test.countDocuments();
-      counts.wishlists = await Wishlist.countDocuments();
-      counts.productReactions = await ProductReaction.countDocuments();
-      counts.ingredientReactions = await IngredientReaction.countDocuments();
-      
-      // Contar productos y obtener info de índices
-      const Product = await getModel('Product');
-      counts.productos = await Product.countDocuments();
-      
-      // Información de índices de productos
-      try {
-        const indexes = await Product.collection.getIndexes();
-        productIndexInfo = {
-          totalIndexes: Object.keys(indexes).length,
-          indexNames: Object.keys(indexes),
-          optimized: Object.keys(indexes).includes('product_search_compound_idx'),
-          details: Object.keys(indexes).reduce((acc, name) => {
-            acc[name] = {
-              key: indexes[name].key,
-              unique: indexes[name].unique || false
-            };
-            return acc;
-          }, {})
-        };
-      } catch (indexError) {
-        productIndexInfo = { error: indexError.message };
-      }
-      
-    } catch (countError) {
-      error = countError.message;
-      console.error("Error contando documentos:", countError);
-    }
+    // Información adicional
+    const ultimosUsuarios = await User.find().sort({ createdAt: -1 }).limit(3).select('-password');
     
-    // Últimos usuarios (sin contraseñas)
-    let ultimosUsuarios = [];
-    try {
-      const User = await getModel('User');
-      ultimosUsuarios = await User.find()
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select('-password')
-        .lean();
-    } catch (userError) {
-      console.error("Error obteniendo últimos usuarios:", userError);
-    }
-    
+    // Devolver resultado
     res.json({
       info,
-      contadores: counts,
-      productIndexes: productIndexInfo,
-      ultimosUsuarios,
-      error: error
+      contadores: {
+        usuarios,
+        tests,
+        wishlists
+      },
+      ultimosUsuarios
     });
   } catch (error) {
-    res.status(500).json({ 
-      error: "Error en diagnóstico",
-      message: error.message 
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
