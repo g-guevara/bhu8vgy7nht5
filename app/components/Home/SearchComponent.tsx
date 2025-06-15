@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - VERSIÓN PYTHON REPLICADA - ERRORES TYPESCRIPT CORREGIDOS
+// app/components/Home/SearchComponent.tsx - VERSIÓN FINAL CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -63,10 +63,10 @@ interface Product {
   ingredients_text: string;
 }
 
-// ✅ FIXED: Made relevanceScore required (not optional) since it's always assigned
+// ✅ FIXED: Made relevanceScore required since it's always assigned
 interface ProductWithEmoji extends Product {
   emoji?: string;
-  relevanceScore: number; // ✅ Changed from optional to required
+  relevanceScore: number;
 }
 
 interface SearchComponentProps {
@@ -136,7 +136,7 @@ function calculateRelevanceScore(product: Product, searchTerm: string): number {
   return score;
 }
 
-// FUNCIÓN EXACTA DEL PYTHON: search_in_collection (equivalente)
+// 🔥 FUNCIÓN CORREGIDA: Con noScoring=true para evitar doble scoring
 async function searchInSpecificCollection(searchTerm: string): Promise<ProductWithEmoji[]> {
   const collectionInfo = getCollectionForSearchTerm(searchTerm);
   
@@ -154,7 +154,8 @@ async function searchInSpecificCollection(searchTerm: string): Promise<ProductWi
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
     
-    const response = await fetch(`${uri}/api/search?q=${encodeURIComponent(searchTerm)}&type=all&limit=200`, {
+    // 🔥 IMPORTANTE: Usar noScoring=true para desactivar el scoring de la API
+    const response = await fetch(`${uri}/api/search?q=${encodeURIComponent(searchTerm)}&type=name&limit=500&debug=false&noScoring=true`, {
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -174,22 +175,32 @@ async function searchInSpecificCollection(searchTerm: string): Promise<ProductWi
       return [];
     }
     
-    // ✅ FIXED: Ensure relevanceScore is always assigned
+    // 🔥 IMPORTANTE: Aplicar NUESTRO sistema de scoring (el de Python)
+    // ignorando cualquier scoring que venga de la API
     const resultsWithScores = data.results.map((product: Product): ProductWithEmoji => {
       const relevanceScore = calculateRelevanceScore(product, searchTerm);
       return {
         ...product,
         emoji: generateEmojiForProduct(product),
-        relevanceScore // ✅ This is now guaranteed to be a number
+        relevanceScore
       };
     });
     
-    // ✅ FIXED: Now TypeScript knows relevanceScore is always defined
+    // Ordenar por NUESTRO score de relevancia (descendente)
     const sortedResults = resultsWithScores
       .filter((product: ProductWithEmoji) => product.relevanceScore > 0)
       .sort((a: ProductWithEmoji, b: ProductWithEmoji) => b.relevanceScore - a.relevanceScore);
     
     console.log(`📊 Resultados finales: ${sortedResults.length} con relevancia > 0`);
+    
+    // Log top 3 para debugging
+    if (__DEV__ && sortedResults.length > 0) {
+      console.log('🏆 Top 3 resultados:');
+      // ✅ FIXED: Added proper types for parameters
+      sortedResults.slice(0, 3).forEach((r: ProductWithEmoji, i: number) => {
+        console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore}`);
+      });
+    }
     
     return sortedResults;
     
@@ -306,7 +317,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                   historyProducts.push({
                     ...product,
                     emoji: generateEmojiForProduct(product),
-                    relevanceScore: 1000 // ✅ FIXED: Always assign relevanceScore
+                    relevanceScore: 1000
                   });
                 }
               }
@@ -382,7 +393,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       // Mostrar top 3 para debugging (como en el Python)
       if (__DEV__ && results.length > 0) {
         console.log('🏆 Top 3 resultados:');
-        results.slice(0, 3).forEach((r, i) => {
+        // ✅ FIXED: Added proper types for parameters
+        results.slice(0, 3).forEach((r: ProductWithEmoji, i: number) => {
           console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore}`);
         });
       }
@@ -417,7 +429,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       <View style={searchStyles.productInfo}>
         <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
           {product.product_name}
-          {/* ✅ FIXED: Now TypeScript knows relevanceScore is always defined */}
           {__DEV__ && (
             <Text style={{ color: '#999', fontSize: 12 }}> ({product.relevanceScore})</Text>
           )}
@@ -454,7 +465,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           returnKeyType="search"
         />
         
-        {/* BOTÓN DE BÚSQUEDA - NUEVO */}
+        {/* BOTÓN DE BÚSQUEDA */}
         <TouchableOpacity
           style={[
             searchStyles.searchButton,
