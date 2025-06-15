@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - VERSIÓN PYTHON REPLICADA
+// app/components/Home/SearchComponent.tsx - VERSIÓN PYTHON REPLICADA - ERRORES TYPESCRIPT CORREGIDOS
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -63,9 +63,10 @@ interface Product {
   ingredients_text: string;
 }
 
+// ✅ FIXED: Made relevanceScore required (not optional) since it's always assigned
 interface ProductWithEmoji extends Product {
   emoji?: string;
-  relevanceScore?: number;
+  relevanceScore: number; // ✅ Changed from optional to required
 }
 
 interface SearchComponentProps {
@@ -173,17 +174,17 @@ async function searchInSpecificCollection(searchTerm: string): Promise<ProductWi
       return [];
     }
     
-    // Calcular scores de relevancia Y generar emojis
-    const resultsWithScores = data.results.map((product: Product) => {
+    // ✅ FIXED: Ensure relevanceScore is always assigned
+    const resultsWithScores = data.results.map((product: Product): ProductWithEmoji => {
       const relevanceScore = calculateRelevanceScore(product, searchTerm);
       return {
         ...product,
         emoji: generateEmojiForProduct(product),
-        relevanceScore
+        relevanceScore // ✅ This is now guaranteed to be a number
       };
     });
     
-    // Ordenar por score de relevancia (mayor a menor) - EXACTO DEL PYTHON
+    // ✅ FIXED: Now TypeScript knows relevanceScore is always defined
     const sortedResults = resultsWithScores
       .filter((product: ProductWithEmoji) => product.relevanceScore > 0)
       .sort((a: ProductWithEmoji, b: ProductWithEmoji) => b.relevanceScore - a.relevanceScore);
@@ -304,7 +305,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                 if (product) {
                   historyProducts.push({
                     ...product,
-                    emoji: generateEmojiForProduct(product)
+                    emoji: generateEmojiForProduct(product),
+                    relevanceScore: 1000 // ✅ FIXED: Always assign relevanceScore
                   });
                 }
               }
@@ -415,8 +417,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       <View style={searchStyles.productInfo}>
         <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
           {product.product_name}
-          {/* Mostrar score en desarrollo */}
-          {__DEV__ && product.relevanceScore && (
+          {/* ✅ FIXED: Now TypeScript knows relevanceScore is always defined */}
+          {__DEV__ && (
             <Text style={{ color: '#999', fontSize: 12 }}> ({product.relevanceScore})</Text>
           )}
         </Text>
