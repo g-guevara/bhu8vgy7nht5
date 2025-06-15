@@ -1,4 +1,4 @@
-// app/styles/HomeComponentStyles.ts - Estilos corregidos sin solapamiento
+// app/styles/HomeComponentStyles.ts - Estilos actualizados con botón Search
 import { StyleSheet } from 'react-native';
 
 // Main HomeScreen Styles
@@ -33,14 +33,15 @@ export const homeStyles = StyleSheet.create({
   },
 });
 
-// Search Component Styles
+// Search Component Styles - ACTUALIZADOS CON BOTÓN SEARCH
 export const searchStyles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f2f2f7',
     borderRadius: 10,
-    paddingHorizontal: 15,
+    paddingLeft: 15,
+    paddingRight: 5,
     marginBottom: 17,
     height: 50,
   },
@@ -48,9 +49,33 @@ export const searchStyles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#333',
+    paddingRight: 10,
   },
+  
+  // NUEVO: Botón de búsqueda
+  searchButton: {
+    backgroundColor: '#000',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 5,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+  searchButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
   clearButton: {
     padding: 8,
+    marginLeft: 5,
   },
   clearButtonText: {
     fontSize: 18,
@@ -58,7 +83,6 @@ export const searchStyles = StyleSheet.create({
   },
   resultsContainer: {
     marginBottom: 20,
-    // paddingHorizontal:10,
   },
   sectionTitle: {
     fontSize: 24,
@@ -221,14 +245,12 @@ export const categoryStyles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 15,
     marginBottom: 15,
-    // REMOVIDO: paddingHorizontal: 10, para alinear con la búsqueda
   },
   categoriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 80,
-    // REMOVIDO: paddingHorizontal: 10, para alinear con la búsqueda
   },
   categoryItem: {
     width: '48%',
