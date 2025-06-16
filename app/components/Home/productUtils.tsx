@@ -47,9 +47,9 @@ export const loadImagesForProducts = async (
 
       console.log(`🔍 Buscando imagen para producto: ${product.code}`);
       
-      // ⏱️ TIMEOUT DE 10 SEGUNDOS
+      // ⏱️ TIMEOUT DE 30 SEGUNDOS
       const timeoutPromise = new Promise<string | null>((_, reject) => {
-        setTimeout(() => reject(new Error('Image API timeout after 10 seconds')), 10000);
+        setTimeout(() => reject(new Error('Image API timeout after 30 seconds')), 30000);
       });
       
       const imagePromise = imageCacheUtils.getProductImage(product.code);
@@ -79,7 +79,7 @@ export const loadImagesForProducts = async (
       
       // Si es timeout, mostrar mensaje específico
       if (error instanceof Error && error.message.includes('timeout')) {
-        console.log(`⏱️ Timeout de 10s alcanzado para producto: ${product.code}, usando fallback`);
+        console.log(`⏱️ Timeout de 30s alcanzado para producto: ${product.code}, usando fallback`);
       }
       
       // Actualizar estado global con error
