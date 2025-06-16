@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - Componente principal de búsqueda
+// app/components/Home/SearchComponent.tsx - Con precarga inteligente de cache
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -15,6 +15,9 @@ import {
   handleProductPress as handleProductPressUtil
 } from './productUtils';
 
+
+import { ProductCacheAPI } from '../../utils/productCacheUtils';
+
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
 }
@@ -26,6 +29,13 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const [historyItems, setHistoryItems] = useState<ProductWithImageAndEmoji[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  
+  // 🆕 Estados para cache
+  const [cachingProgress, setCachingProgress] = useState<{
+    isActive: boolean;
+    processed: number;
+    total: number;
+  }>({ isActive: false, processed: 0, total: 0 });
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,7 +59,22 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         for (const historyItem of historyData.slice(0, MAX_HISTORY_ITEMS)) {
           try {
-            // Intentar encontrar el producto usando el mismo sistema
+            // 🆕 PRIMERO: Intentar cargar desde cache inteligente
+            const cachedProduct = await ProductCacheAPI.getProduct(historyItem.code);
+            
+            if (cachedProduct) {
+              console.log(`💾 History item ${historyItem.code} loaded from cache`);
+              historyProducts.push({
+                ...cachedProduct,
+                relevanceScore: 1000,
+                imageUri: null,
+                imageLoading: false,
+                imageError: false
+              });
+              continue; // Pasar al siguiente item
+            }
+            
+            // FALLBACK: Si no está en cache, usar el método original
             const collectionInfo = getCollectionForSearchTerm(historyItem.code);
             if (collectionInfo) {
               const response = await fetch(`${collectionInfo.uri}/api/search/code/${historyItem.code}`);
@@ -64,6 +89,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                     imageUri: null,
                     imageLoading: false,
                     imageError: false
+                  });
+                  
+                  // 🆕 Guardar en cache para próximas veces
+                  await ProductCacheAPI.setProduct({
+                    code: product.code,
+                    product_name: product.product_name,
+                    brands: product.brands,
+                    ingredients_text: product.ingredients_text,
+                    image_url: product.image_url
                   });
                 }
               }
@@ -120,18 +154,71 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // FUNCIÓN PRINCIPAL DE BÚSQUEDA
+  // 🆕 FUNCIÓN PARA PRECARGAR PRODUCTOS EN CACHE
+  const preloadProductsToCache = async (products: ProductWithImageAndEmoji[]) => {
+    if (products.length === 0) return;
+    
+    try {
+      setCachingProgress({ isActive: true, processed: 0, total: products.length });
+      
+      console.log(`🚀 Starting to preload ${products.length} products to cache...`);
+      
+      // Procesar en lotes de 10 para mejor performance
+      const batchSize = 10;
+      let processed = 0;
+      
+      for (let i = 0; i < products.length; i += batchSize) {
+        const batch = products.slice(i, i + batchSize);
+        
+        // Preparar productos para cache
+        const productsToCache = batch.map(product => ({
+          code: product.code,
+          product_name: product.product_name,
+          brands: product.brands,
+          ingredients_text: product.ingredients_text,
+          image_url: product.image_url
+        }));
+        
+        // Precargar lote
+        await ProductCacheAPI.preloadProducts(productsToCache);
+        
+        processed += batch.length;
+        setCachingProgress(prev => ({ ...prev, processed }));
+        
+        // Pequeña pausa para no bloquear la UI
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      
+      console.log(`✅ Successfully preloaded ${processed} products to cache`);
+      
+      // Mostrar estadísticas en desarrollo
+      if (__DEV__) {
+        const stats = await ProductCacheAPI.getStats();
+        console.log(`📊 Cache now contains ${stats.totalProducts} products (${stats.totalSizeMB}MB)`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error preloading products to cache:', error);
+    } finally {
+      // Ocultar indicador después de un pequeño delay
+      setTimeout(() => {
+        setCachingProgress({ isActive: false, processed: 0, total: 0 });
+      }, 1000);
+    }
+  };
+
+  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON PRECARGA
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
     if (!searchQuery) {
       setSearchResults([]);
-      setCurrentPage(1); // Reset página al limpiar búsqueda
+      setCurrentPage(1);
       return;
     }
 
     setSearchLoading(true);
-    setCurrentPage(1); // Reset página en nueva búsqueda
+    setCurrentPage(1);
     try {
       console.log(`🔍 Iniciando búsqueda: "${searchQuery}"`);
       
@@ -147,6 +234,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         const firstPageResults = results.slice(0, RESULTS_PER_PAGE);
         loadImagesForProducts(firstPageResults, setSearchResults);
         console.log(`📸 Cargando imágenes solo para los primeros ${firstPageResults.length} productos`);
+        
+        // 🆕 NUEVA FUNCIONALIDAD: Precargar productos en cache en background
+        // Solo precargar si hay más de 5 resultados para que valga la pena
+        if (results.length > 5) {
+          // Ejecutar en background sin bloquear la UI
+          setTimeout(() => {
+            preloadProductsToCache(results);
+          }, 500); // Delay de 500ms para que la UI se actualice primero
+        }
       }
       
       // Mostrar top 3 para debugging
@@ -166,6 +262,19 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   };
 
   const handleProductPress = async (product: ProductWithImageAndEmoji) => {
+    // 🆕 Asegurar que el producto esté en cache antes de navegar
+    try {
+      await ProductCacheAPI.setProduct({
+        code: product.code,
+        product_name: product.product_name,
+        brands: product.brands,
+        ingredients_text: product.ingredients_text,
+        image_url: product.image_url
+      });
+    } catch (error) {
+      console.error('Error caching product before navigation:', error);
+    }
+    
     await handleProductPressUtil(product, router);
     await saveToHistory(product.code);
   };
@@ -291,7 +400,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             onPress={() => {
               setSearchText('');
               setSearchResults([]);
-              setCurrentPage(1); // Reset página al limpiar
+              setCurrentPage(1);
               onFocusChange(false);
             }}
           >
@@ -299,6 +408,40 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {/* 🆕 INDICADOR DE PROGRESO DE CACHE */}
+      {cachingProgress.isActive && (
+        <View style={{
+          paddingHorizontal: 20,
+          paddingVertical: 8,
+          backgroundColor: '#f8f9fa',
+          borderBottomWidth: 1,
+          borderBottomColor: '#e0e0e0'
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 12, color: '#666', fontWeight: '500' }}>
+              💾 Caching products for faster access...
+            </Text>
+            <Text style={{ fontSize: 12, color: '#666' }}>
+              {cachingProgress.processed}/{cachingProgress.total}
+            </Text>
+          </View>
+          <View style={{
+            height: 2,
+            backgroundColor: '#e0e0e0',
+            borderRadius: 1,
+            marginTop: 4,
+            overflow: 'hidden'
+          }}>
+            <View style={{
+              height: '100%',
+              backgroundColor: '#007AFF',
+              width: `${(cachingProgress.processed / cachingProgress.total) * 100}%`,
+              borderRadius: 1
+            }} />
+          </View>
+        </View>
+      )}
 
       {/* Info de debugging en desarrollo */}
       {__DEV__ && searchText && (

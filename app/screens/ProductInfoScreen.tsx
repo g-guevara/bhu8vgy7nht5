@@ -1,5 +1,5 @@
 // app/screens/ProductInfoScreen.tsx
-// Version: 2.0.0
+// Version: 3.0.0 - Con sistema de cache inteligente
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -18,6 +18,7 @@ import { Product } from '../data/productData';
 import { styles } from '../styles/ProductInfoStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
+import { ProductCacheAPI, CachedProduct } from '../utils/productCacheUtils';
 
 // Import components
 import ProductHeader from '../components/ProductInfo/ProductHeader';
@@ -40,26 +41,72 @@ export default function ProductInfoScreen() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [existingNote, setExistingNote] = useState<any>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [loadSource, setLoadSource] = useState<'cache' | 'storage' | 'none'>('none');
   
   // References for auto-save functionality
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedNotesRef = useRef<string>('');
   const notesBeforeEditRef = useRef<string>('');
   
-  // Load the product from AsyncStorage when the component mounts
+  // Load the product when the component mounts
   useEffect(() => {
     const loadProduct = async () => {
       try {
+        console.log('🔍 Loading product information...');
+        
+        // PASO 1: Intentar obtener código del producto de AsyncStorage
         const productJson = await AsyncStorage.getItem('selectedProduct');
-        if (productJson) {
-          const loadedProduct = JSON.parse(productJson);
-          setProduct(loadedProduct);
-          
-          // After loading product, check if there are existing notes
-          fetchExistingNotes(loadedProduct.code);
+        if (!productJson) {
+          throw new Error('No product selected');
         }
+        
+        const tempProduct = JSON.parse(productJson);
+        const productCode = tempProduct.code;
+        
+        if (!productCode) {
+          throw new Error('Invalid product code');
+        }
+        
+        console.log(`📦 Loading product: ${productCode}`);
+        
+        // PASO 2: Intentar cargar desde cache inteligente primero
+        const cachedProduct = await ProductCacheAPI.getProduct(productCode);
+        
+        if (cachedProduct) {
+          console.log(`💾 Product loaded from intelligent cache`);
+          setProduct(cachedProduct);
+          setLoadSource('cache');
+          
+          // Mostrar toast discreto indicando carga desde cache
+          showToast('Loaded from cache', 'success');
+          
+          // After loading from cache, check if there are existing notes
+          fetchExistingNotes(cachedProduct.code);
+          setLoading(false);
+          return;
+        }
+        
+        // PASO 3: Si no está en cache, usar AsyncStorage como fallback
+        console.log(`🗄️ Product not in cache, using fallback from AsyncStorage`);
+        setProduct(tempProduct);
+        setLoadSource('storage');
+        
+        // PASO 4: Guardar en cache para próximas veces
+        await ProductCacheAPI.setProduct({
+          code: tempProduct.code,
+          product_name: tempProduct.product_name,
+          brands: tempProduct.brands,
+          ingredients_text: tempProduct.ingredients_text,
+          image_url: tempProduct.image_url
+        });
+        
+        console.log(`💾 Product saved to intelligent cache for future access`);
+        
+        // After loading product, check if there are existing notes
+        fetchExistingNotes(tempProduct.code);
+        
       } catch (error) {
-        console.error('Error loading product from AsyncStorage:', error);
+        console.error('❌ Error loading product:', error);
         showToast('Failed to load product details', 'error');
       } finally {
         setLoading(false);
@@ -232,6 +279,26 @@ export default function ProductInfoScreen() {
     });
   };
 
+  // 🆕 Función para mostrar estadísticas del cache (solo en desarrollo)
+  const showCacheStats = async () => {
+    if (!__DEV__) return;
+    
+    try {
+      const stats = await ProductCacheAPI.getStats();
+      console.log('📊 Product Cache Stats:', {
+        totalProducts: stats.totalProducts,
+        cacheSizeMB: stats.totalSizeMB,
+        hitRate: `${stats.cacheHitRate}%`,
+        oldestProduct: stats.oldestProductAge,
+        mostAccessed: stats.mostAccessedProduct?.product_name
+      });
+      
+      showToast(`Cache: ${stats.totalProducts} products, ${stats.cacheHitRate}% hit rate`, 'success');
+    } catch (error) {
+      console.error('Error getting cache stats:', error);
+    }
+  };
+
   // Show loading indicator while fetching the product
   if (loading) {
     return (
@@ -242,9 +309,21 @@ export default function ProductInfoScreen() {
             <Text style={styles.backText}>Home</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
+          {/* 🆕 Botón de estadísticas en desarrollo */}
+          {__DEV__ && (
+            <TouchableOpacity 
+              onPress={showCacheStats}
+              style={{ position: 'absolute', right: 16, padding: 8 }}
+            >
+              <Text style={{ fontSize: 16 }}>📊</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={{ marginTop: 15, color: '#666' }}>
+            Loading product details...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -280,6 +359,23 @@ export default function ProductInfoScreen() {
           <Text style={styles.backText}>Home</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Information</Text>
+        
+        {/* 🆕 Indicador de fuente de carga y botón de estadísticas en desarrollo */}
+        {__DEV__ && (
+          <View style={{ position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ 
+              fontSize: 12, 
+              color: loadSource === 'cache' ? '#34C759' : '#666',
+              marginRight: 8,
+              fontWeight: '600'
+            }}>
+              {loadSource === 'cache' ? '💾' : '🗄️'}
+            </Text>
+            <TouchableOpacity onPress={showCacheStats} style={{ padding: 8 }}>
+              <Text style={{ fontSize: 16 }}>📊</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -293,9 +389,12 @@ export default function ProductInfoScreen() {
           <ProductDetails product={product} />
           
           <View style={styles.divider} />
-                    {/* Component 5: Product Actions (Wishlist and Test buttons) */}
+          
+          {/* Component 5: Product Actions (Wishlist and Test buttons) */}
           <ProductActions product={product} />
-                    <View style={styles.divider} />
+          
+          <View style={styles.divider} />
+          
           {/* Component 3: Product Reactions */}
           <ProductReactions 
             selectedReaction={selectedReaction} 
@@ -315,8 +414,27 @@ export default function ProductInfoScreen() {
             characterLimit={NOTES_CHARACTER_LIMIT}
           />
           
-          {/* Component 5: Product Actions (Wishlist and Test buttons) */}
-          {/* <ProductActions product={product} /> */}
+          {/* 🆕 Información del cache (solo en desarrollo) */}
+          {__DEV__ && (
+            <View style={{
+              marginTop: 20,
+              padding: 12,
+              backgroundColor: '#f8f9fa',
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: '#e9ecef'
+            }}>
+              <Text style={{ fontSize: 12, color: '#666', fontWeight: '600' }}>
+                🔧 Development Info
+              </Text>
+              <Text style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                Loaded from: {loadSource === 'cache' ? 'Intelligent Cache 💾' : 'AsyncStorage 🗄️'}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#666' }}>
+                Product Code: {product.code}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
