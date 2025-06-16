@@ -1,9 +1,10 @@
-// app/components/Home/SearchComponent.tsx - VERSIÓN FINAL CORREGIDA
+// app/components/Home/SearchComponent.tsx - VERSIÓN CON IMÁGENES DE OPENFOODFACTS
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { searchStyles } from '../../styles/HomeComponentStyles';
+import { imageCacheUtils } from '../../utils/imageCacheUtils';
 
 // Configuración exacta del Python
 const API_CONFIG = {
@@ -63,10 +64,13 @@ interface Product {
   ingredients_text: string;
 }
 
-// ✅ FIXED: Made relevanceScore required since it's always assigned
-interface ProductWithEmoji extends Product {
+// 🖼️ NUEVO: Interface extendida con información de imagen
+interface ProductWithImageAndEmoji extends Product {
   emoji?: string;
   relevanceScore: number;
+  imageUri?: string | null;
+  imageLoading?: boolean;
+  imageError?: boolean;
 }
 
 interface SearchComponentProps {
@@ -137,7 +141,7 @@ function calculateRelevanceScore(product: Product, searchTerm: string): number {
 }
 
 // 🔥 FUNCIÓN CORREGIDA: Con noScoring=true para evitar doble scoring
-async function searchInSpecificCollection(searchTerm: string): Promise<ProductWithEmoji[]> {
+async function searchInSpecificCollection(searchTerm: string): Promise<ProductWithImageAndEmoji[]> {
   const collectionInfo = getCollectionForSearchTerm(searchTerm);
   
   if (!collectionInfo) {
@@ -177,27 +181,30 @@ async function searchInSpecificCollection(searchTerm: string): Promise<ProductWi
     
     // 🔥 IMPORTANTE: Aplicar NUESTRO sistema de scoring (el de Python)
     // ignorando cualquier scoring que venga de la API
-    const resultsWithScores = data.results.map((product: Product): ProductWithEmoji => {
+    const resultsWithScores = data.results.map((product: Product): ProductWithImageAndEmoji => {
       const relevanceScore = calculateRelevanceScore(product, searchTerm);
       return {
         ...product,
         emoji: generateEmojiForProduct(product),
-        relevanceScore
+        relevanceScore,
+        // 🖼️ NUEVO: Inicializar propiedades de imagen
+        imageUri: null,
+        imageLoading: false,
+        imageError: false
       };
     });
     
     // Ordenar por NUESTRO score de relevancia (descendente)
     const sortedResults = resultsWithScores
-      .filter((product: ProductWithEmoji) => product.relevanceScore > 0)
-      .sort((a: ProductWithEmoji, b: ProductWithEmoji) => b.relevanceScore - a.relevanceScore);
+      .filter((product: ProductWithImageAndEmoji) => product.relevanceScore > 0)
+      .sort((a: ProductWithImageAndEmoji, b: ProductWithImageAndEmoji) => b.relevanceScore - a.relevanceScore);
     
     console.log(`📊 Resultados finales: ${sortedResults.length} con relevancia > 0`);
     
     // Log top 3 para debugging
     if (__DEV__ && sortedResults.length > 0) {
       console.log('🏆 Top 3 resultados:');
-      // ✅ FIXED: Added proper types for parameters
-      sortedResults.slice(0, 3).forEach((r: ProductWithEmoji, i: number) => {
+      sortedResults.slice(0, 3).forEach((r: ProductWithImageAndEmoji, i: number) => {
         console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore}`);
       });
     }
@@ -282,8 +289,8 @@ function generateEmojiForProduct(product: Product): string {
 export default function SearchComponent({ onFocusChange }: SearchComponentProps) {
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
-  const [searchResults, setSearchResults] = useState<ProductWithEmoji[]>([]);
-  const [historyItems, setHistoryItems] = useState<ProductWithEmoji[]>([]);
+  const [searchResults, setSearchResults] = useState<ProductWithImageAndEmoji[]>([]);
+  const [historyItems, setHistoryItems] = useState<ProductWithImageAndEmoji[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   
@@ -301,7 +308,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       if (historyJson) {
         const historyData = JSON.parse(historyJson);
         
-        const historyProducts: ProductWithEmoji[] = [];
+        const historyProducts: ProductWithImageAndEmoji[] = [];
         
         for (const historyItem of historyData.slice(0, MAX_HISTORY_ITEMS)) {
           try {
@@ -317,7 +324,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                   historyProducts.push({
                     ...product,
                     emoji: generateEmojiForProduct(product),
-                    relevanceScore: 1000
+                    relevanceScore: 1000,
+                    // 🖼️ NUEVO: Inicializar propiedades de imagen para history
+                    imageUri: null,
+                    imageLoading: false,
+                    imageError: false
                   });
                 }
               }
@@ -328,6 +339,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         }
         
         setHistoryItems(historyProducts);
+        // 🖼️ NUEVO: Cargar imágenes para items del historial
+        loadImagesForProducts(historyProducts, setHistoryItems);
       } else {
         setHistoryItems([]);
       }
@@ -370,7 +383,60 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - REPLICA DEL PYTHON
+  // 🖼️ NUEVA FUNCIÓN: Cargar imágenes para una lista de productos
+  const loadImagesForProducts = async (
+    products: ProductWithImageAndEmoji[], 
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
+  ) => {
+    console.log(`🖼️ Cargando imágenes para ${products.length} productos...`);
+    
+    // Procesar productos en paralelo pero con límite
+    const processProduct = async (product: ProductWithImageAndEmoji, index: number) => {
+      try {
+        // Marcar como cargando
+        setProducts(prevProducts => 
+          prevProducts.map((p, i) => 
+            i === index ? { ...p, imageLoading: true, imageError: false } : p
+          )
+        );
+
+        console.log(`🔍 Buscando imagen para producto: ${product.code}`);
+        const imageUri = await imageCacheUtils.getProductImage(product.code);
+        
+        // Actualizar con la imagen obtenida o error
+        setProducts(prevProducts => 
+          prevProducts.map((p, i) => 
+            i === index ? { 
+              ...p, 
+              imageUri, 
+              imageLoading: false, 
+              imageError: !imageUri 
+            } : p
+          )
+        );
+
+        if (imageUri) {
+          console.log(`✅ Imagen cargada para producto: ${product.code}`);
+        } else {
+          console.log(`❌ No se encontró imagen para producto: ${product.code}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error cargando imagen para producto ${product.code}:`, error);
+        setProducts(prevProducts => 
+          prevProducts.map((p, i) => 
+            i === index ? { ...p, imageLoading: false, imageError: true } : p
+          )
+        );
+      }
+    };
+
+    // Procesar productos con un pequeño delay para evitar sobrecarga
+    for (let i = 0; i < products.length; i++) {
+      setTimeout(() => processProduct(products[i], i), i * 100); // 100ms delay entre cada producto
+    }
+  };
+
+  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - REPLICA DEL PYTHON CON IMÁGENES
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
@@ -390,11 +456,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       console.log(`✅ Búsqueda completada: ${results.length} resultados`);
       
+      // 🖼️ NUEVO: Cargar imágenes para los resultados de búsqueda
+      if (results.length > 0) {
+        loadImagesForProducts(results, setSearchResults);
+      }
+      
       // Mostrar top 3 para debugging (como en el Python)
       if (__DEV__ && results.length > 0) {
         console.log('🏆 Top 3 resultados:');
-        // ✅ FIXED: Added proper types for parameters
-        results.slice(0, 3).forEach((r: ProductWithEmoji, i: number) => {
+        results.slice(0, 3).forEach((r: ProductWithImageAndEmoji, i: number) => {
           console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore}`);
         });
       }
@@ -407,7 +477,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  const handleProductPress = async (product: ProductWithEmoji) => {
+  const handleProductPress = async (product: ProductWithImageAndEmoji) => {
     try {
       await AsyncStorage.setItem('selectedProduct', JSON.stringify(product));
       await saveToHistory(product.code);
@@ -417,15 +487,52 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  const renderProductItem = (product: ProductWithEmoji) => (
+  // 🖼️ COMPONENTE DE IMAGEN ACTUALIZADO
+  const ProductImage: React.FC<{ product: ProductWithImageAndEmoji }> = ({ product }) => {
+    if (product.imageLoading) {
+      return (
+        <View style={[searchStyles.productImageContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color="#007AFF" />
+        </View>
+      );
+    }
+
+    if (product.imageUri && !product.imageError) {
+      return (
+        <View style={searchStyles.productImageContainer}>
+          <Image
+            source={{ uri: product.imageUri }}
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: 12,
+            }}
+            resizeMode="cover"
+            onError={() => {
+              // Si la imagen falla al cargar, marcar como error
+              console.log(`❌ Error cargando imagen para ${product.code}`);
+            }}
+          />
+        </View>
+      );
+    }
+
+    // Fallback al emoji si no hay imagen o hay error
+    return (
+      <View style={searchStyles.productImageContainer}>
+        <Text style={searchStyles.productEmoji}>{product.emoji}</Text>
+      </View>
+    );
+  };
+
+  const renderProductItem = (product: ProductWithImageAndEmoji) => (
     <TouchableOpacity
       key={product.code}
       style={searchStyles.productItem}
       onPress={() => handleProductPress(product)}
     >
-      <View style={searchStyles.productImageContainer}>
-        <Text style={searchStyles.productEmoji}>{product.emoji}</Text>
-      </View>
+      {/* 🖼️ NUEVO: Usar componente de imagen actualizado */}
+      <ProductImage product={product} />
       <View style={searchStyles.productInfo}>
         <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
           {product.product_name}
