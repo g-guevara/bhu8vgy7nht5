@@ -36,12 +36,12 @@ export const loadImagesForProducts = async (
   console.log(`🖼️ Cargando imágenes para ${products.length} productos...`);
   
   // Procesar productos en paralelo pero con límite
-  const processProduct = async (product: ProductWithImageAndEmoji, index: number) => {
+  const processProduct = async (product: ProductWithImageAndEmoji) => {
     try {
-      // Marcar como cargando
+      // Marcar como cargando en el estado global
       setProducts(prevProducts => 
-        prevProducts.map((p, i) => 
-          i === index ? { ...p, imageLoading: true, imageError: false } : p
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
         )
       );
 
@@ -57,10 +57,10 @@ export const loadImagesForProducts = async (
       // Race entre la imagen y el timeout
       const imageUri = await Promise.race([imagePromise, timeoutPromise]);
       
-      // Actualizar con la imagen obtenida o error
+      // Actualizar con la imagen obtenida o error en el estado global
       setProducts(prevProducts => 
-        prevProducts.map((p, i) => 
-          i === index ? { 
+        prevProducts.map(p => 
+          p.code === product.code ? { 
             ...p, 
             imageUri, 
             imageLoading: false, 
@@ -82,9 +82,10 @@ export const loadImagesForProducts = async (
         console.log(`⏱️ Timeout de 10s alcanzado para producto: ${product.code}, usando fallback`);
       }
       
+      // Actualizar estado global con error
       setProducts(prevProducts => 
-        prevProducts.map((p, i) => 
-          i === index ? { ...p, imageLoading: false, imageError: true } : p
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
         )
       );
     }
@@ -92,7 +93,7 @@ export const loadImagesForProducts = async (
 
   // Procesar productos con un pequeño delay para evitar sobrecarga
   for (let i = 0; i < products.length; i++) {
-    setTimeout(() => processProduct(products[i], i), i * 100); // 100ms delay entre cada producto
+    setTimeout(() => processProduct(products[i]), i * 100); // 100ms delay entre cada producto
   }
 };
 

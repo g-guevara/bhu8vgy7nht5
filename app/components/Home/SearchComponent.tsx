@@ -74,8 +74,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         }
         
         setHistoryItems(historyProducts);
-        // Cargar imágenes para items del historial
-        loadImagesForProducts(historyProducts, setHistoryItems);
+        // 🎯 OPTIMIZACIÓN: Cargar imágenes para items del historial (pocos items)
+        if (historyProducts.length > 0) {
+          loadImagesForProducts(historyProducts, setHistoryItems);
+        }
       } else {
         setHistoryItems([]);
       }
@@ -140,9 +142,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       console.log(`✅ Búsqueda completada: ${results.length} resultados`);
       
-      // Cargar imágenes para los resultados de búsqueda
+      // 🎯 OPTIMIZACIÓN: Solo cargar imágenes de la primera página
       if (results.length > 0) {
-        loadImagesForProducts(results, setSearchResults);
+        const firstPageResults = results.slice(0, RESULTS_PER_PAGE);
+        loadImagesForProducts(firstPageResults, setSearchResults);
+        console.log(`📸 Cargando imágenes solo para los primeros ${firstPageResults.length} productos`);
       }
       
       // Mostrar top 3 para debugging
@@ -185,6 +189,23 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     const totalPages = getTotalPages();
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
+      
+      // 🎯 OPTIMIZACIÓN: Cargar imágenes solo de la nueva página
+      const startIndex = (page - 1) * RESULTS_PER_PAGE;
+      const endIndex = startIndex + RESULTS_PER_PAGE;
+      const pageResults = searchResults.slice(startIndex, endIndex);
+      
+      // Filtrar solo productos que no tienen imagen cargada aún
+      const productsNeedingImages = pageResults.filter(product => 
+        !product.imageUri && !product.imageLoading && !product.imageError
+      );
+      
+      if (productsNeedingImages.length > 0) {
+        console.log(`📸 Página ${page}: Cargando imágenes para ${productsNeedingImages.length} productos nuevos`);
+        loadImagesForProducts(productsNeedingImages, setSearchResults);
+      } else {
+        console.log(`✅ Página ${page}: Todas las imágenes ya están cargadas`);
+      }
     }
   };
 
