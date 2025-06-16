@@ -2,15 +2,31 @@
 
 import React from 'react';
 import { View, Text, ActivityIndicator, Image } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { imageCacheUtils } from '../../utils/imageCacheUtils';
 import { searchStyles } from '../../styles/HomeComponentStyles';
 import { ProductWithImageAndEmoji } from './searchLogic';
 
-// Emoji simplificado: solo devuelve plato y cubiertos para todos
-export function generateEmojiForProduct(product: ProductWithImageAndEmoji): string {
-  return '🍽️';
-}
+// Componente de placeholder de imagen
+const ImagePlaceholder: React.FC = () => (
+  <View style={{
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0'
+  }}>
+    <MaterialCommunityIcons 
+      name="image" 
+      size={32} 
+      color="#c0c0c0" 
+    />
+  </View>
+);
 
 // Función para cargar imágenes para una lista de productos
 export const loadImagesForProducts = async (
@@ -30,7 +46,16 @@ export const loadImagesForProducts = async (
       );
 
       console.log(`🔍 Buscando imagen para producto: ${product.code}`);
-      const imageUri = await imageCacheUtils.getProductImage(product.code);
+      
+      // ⏱️ TIMEOUT DE 10 SEGUNDOS
+      const timeoutPromise = new Promise<string | null>((_, reject) => {
+        setTimeout(() => reject(new Error('Image API timeout after 10 seconds')), 10000);
+      });
+      
+      const imagePromise = imageCacheUtils.getProductImage(product.code);
+      
+      // Race entre la imagen y el timeout
+      const imageUri = await Promise.race([imagePromise, timeoutPromise]);
       
       // Actualizar con la imagen obtenida o error
       setProducts(prevProducts => 
@@ -51,6 +76,12 @@ export const loadImagesForProducts = async (
       }
     } catch (error) {
       console.error(`❌ Error cargando imagen para producto ${product.code}:`, error);
+      
+      // Si es timeout, mostrar mensaje específico
+      if (error instanceof Error && error.message.includes('timeout')) {
+        console.log(`⏱️ Timeout de 10s alcanzado para producto: ${product.code}, usando fallback`);
+      }
+      
       setProducts(prevProducts => 
         prevProducts.map((p, i) => 
           i === index ? { ...p, imageLoading: false, imageError: true } : p
@@ -94,10 +125,10 @@ export const ProductImage: React.FC<{ product: ProductWithImageAndEmoji }> = ({ 
     );
   }
 
-  // Fallback al emoji si no hay imagen o hay error
+  // Fallback al placeholder si no hay imagen o hay error
   return (
     <View style={searchStyles.productImageContainer}>
-      <Text style={searchStyles.productEmoji}>{product.emoji}</Text>
+      <ImagePlaceholder />
     </View>
   );
 };
@@ -114,28 +145,3 @@ export const handleProductPress = async (
     console.error('Error storing product:', error);
   }
 };
-
-// Función para renderizar un item de producto
-export const renderProductItem = (
-  product: ProductWithImageAndEmoji,
-  onPress: (product: ProductWithImageAndEmoji) => void
-) => (
-  <View
-    key={product.code}
-    style={searchStyles.productItem}
-  >
-    <ProductImage product={product} />
-    <View style={searchStyles.productInfo}>
-      <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
-        {product.product_name}
-        {__DEV__ && (
-          <Text style={{ color: '#999', fontSize: 12 }}> ({product.relevanceScore})</Text>
-        )}
-      </Text>
-      <Text style={searchStyles.productBrand} numberOfLines={1} ellipsizeMode="tail">
-        {product.brands || 'Sin marca'}
-      </Text>
-    </View>
-    <Text style={searchStyles.arrowIcon}>›</Text>
-  </View>
-);

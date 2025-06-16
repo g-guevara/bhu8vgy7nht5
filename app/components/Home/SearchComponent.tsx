@@ -27,6 +27,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const RESULTS_PER_PAGE = 15;
+  
   const MAX_HISTORY_ITEMS = 2;
   const HISTORY_KEY = 'product_history';
 
@@ -56,7 +60,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                 if (product) {
                   historyProducts.push({
                     ...product,
-                    emoji: '🍽️',
                     relevanceScore: 1000,
                     imageUri: null,
                     imageLoading: false,
@@ -121,10 +124,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     
     if (!searchQuery) {
       setSearchResults([]);
+      setCurrentPage(1); // Reset página al limpiar búsqueda
       return;
     }
 
     setSearchLoading(true);
+    setCurrentPage(1); // Reset página en nueva búsqueda
     try {
       console.log(`🔍 Iniciando búsqueda: "${searchQuery}"`);
       
@@ -165,6 +170,42 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     const info = getCollectionForSearchTerm(query);
     if (!info) return 'No determinada';
     return `DB${info.db} - ${info.collection}`;
+  };
+
+  // Funciones de paginación
+  const getTotalPages = () => Math.ceil(searchResults.length / RESULTS_PER_PAGE);
+  
+  const getCurrentPageResults = () => {
+    const startIndex = (currentPage - 1) * RESULTS_PER_PAGE;
+    const endIndex = startIndex + RESULTS_PER_PAGE;
+    return searchResults.slice(startIndex, endIndex);
+  };
+
+  const goToPage = (page: number) => {
+    const totalPages = getTotalPages();
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const getPageNumbers = () => {
+    const totalPages = getTotalPages();
+    const pages = [];
+    const maxVisiblePages = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    // Ajustar si estamos cerca del final
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
   };
 
   const renderProductClickable = (product: ProductWithImageAndEmoji) => (
@@ -229,6 +270,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             onPress={() => {
               setSearchText('');
               setSearchResults([]);
+              setCurrentPage(1); // Reset página al limpiar
               onFocusChange(false);
             }}
           >
@@ -267,7 +309,76 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           </View>
         ) : searchText && searchResults.length > 0 ? (
           <>
-            {searchResults.map(product => renderProductClickable(product))}
+            {/* Resultados de la página actual */}
+            {getCurrentPageResults().map(product => renderProductClickable(product))}
+
+            {/* Información y controles de paginación al final */}
+            <View style={searchStyles.paginationContainer}>
+              <View style={searchStyles.paginationInfo}>
+                <Text style={searchStyles.paginationInfoText}>
+                  Mostrando {((currentPage - 1) * RESULTS_PER_PAGE) + 1}-{Math.min(currentPage * RESULTS_PER_PAGE, searchResults.length)} de {searchResults.length} resultados
+                </Text>
+                <Text style={searchStyles.paginationInfoText}>
+                  Página {currentPage} de {getTotalPages()}
+                </Text>
+              </View>
+
+              {/* Controles de paginación */}
+              {getTotalPages() > 1 && (
+                <View style={searchStyles.paginationControls}>
+                  {/* Botón Anterior */}
+                  <TouchableOpacity
+                    style={[
+                      searchStyles.paginationButton,
+                      currentPage === 1 && searchStyles.paginationButtonDisabled
+                    ]}
+                    onPress={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <Text style={[
+                      searchStyles.paginationButtonText,
+                      currentPage === 1 && searchStyles.paginationButtonTextDisabled
+                    ]}>‹</Text>
+                  </TouchableOpacity>
+
+                  {/* Números de página */}
+                  <View style={searchStyles.paginationPageNumbers}>
+                    {getPageNumbers().map(pageNum => (
+                      <TouchableOpacity
+                        key={pageNum}
+                        style={[
+                          searchStyles.paginationPageButton,
+                          currentPage === pageNum && searchStyles.paginationPageButtonActive
+                        ]}
+                        onPress={() => goToPage(pageNum)}
+                      >
+                        <Text style={[
+                          searchStyles.paginationPageButtonText,
+                          currentPage === pageNum && searchStyles.paginationPageButtonTextActive
+                        ]}>
+                          {pageNum}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Botón Siguiente */}
+                  <TouchableOpacity
+                    style={[
+                      searchStyles.paginationButton,
+                      currentPage === getTotalPages() && searchStyles.paginationButtonDisabled
+                    ]}
+                    onPress={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === getTotalPages()}
+                  >
+                    <Text style={[
+                      searchStyles.paginationButtonText,
+                      currentPage === getTotalPages() && searchStyles.paginationButtonTextDisabled
+                    ]}>›</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </>
         ) : searchText && searchResults.length === 0 ? (
           <View style={searchStyles.noResultsContainer}>

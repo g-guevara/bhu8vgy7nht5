@@ -174,7 +174,6 @@ export async function searchInSpecificCollection(searchTerm: string): Promise<Pr
       const relevanceScore = calculateRelevanceScore(product, searchTerm);
       return {
         ...product,
-        emoji: '🍽️', // Emoji fijo para todos
         relevanceScore,
         imageUri: null,
         imageLoading: false,
