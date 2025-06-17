@@ -1,5 +1,5 @@
 // app/screens/ProductInfoScreen.tsx
-// Version: 4.1.0 - Con validación de datos corregida para el error startsWith
+// Version: 4.2.0 - Con sistema de cache de imágenes integrado
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -26,6 +26,9 @@ import {
   getProductDataStats 
 } from '../data/productData';
 
+// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
+import { imageCacheUtils } from '../utils/imageCacheUtils';
+
 // Import components
 import ProductHeader from '../components/ProductInfo/ProductHeader';
 import ProductDetails from '../components/ProductInfo/ProductDetails';
@@ -48,6 +51,10 @@ export default function ProductInfoScreen() {
   const [existingNote, setExistingNote] = useState<any>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   
+  // 🆕 Estados para el sistema de cache de imágenes
+  const [productImageUri, setProductImageUri] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  
   // 🆕 Estado para información del sistema de datos
   const [dataSource, setDataSource] = useState<'integrated' | 'asyncstorage' | 'none'>('none');
   const [dataStats, setDataStats] = useState<{
@@ -60,6 +67,28 @@ export default function ProductInfoScreen() {
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedNotesRef = useRef<string>('');
   const notesBeforeEditRef = useRef<string>('');
+  
+  // 🆕 Función para cargar imagen desde cache
+  const loadProductImage = async (productCode: string) => {
+    setImageLoading(true);
+    try {
+      console.log(`🖼️ Loading image for product: ${productCode}`);
+      const imageUri = await imageCacheUtils.getProductImage(productCode);
+      
+      if (imageUri) {
+        console.log(`✅ Image loaded for product: ${productCode}`);
+        setProductImageUri(imageUri);
+      } else {
+        console.log(`❌ No image found for product: ${productCode}`);
+        setProductImageUri(null);
+      }
+    } catch (error) {
+      console.error(`❌ Error loading image for product ${productCode}:`, error);
+      setProductImageUri(null);
+    } finally {
+      setImageLoading(false);
+    }
+  };
   
   // Load the product when the component mounts
   useEffect(() => {
@@ -139,6 +168,10 @@ export default function ProductInfoScreen() {
             setProduct(validatedProduct);
             setDataSource('integrated');
             showToast('Loaded from integrated data', 'success');
+            
+            // 🆕 CARGAR IMAGEN DESDE CACHE
+            await loadProductImage(validatedProduct.code);
+            
             loadDataStats();
             fetchExistingNotes(validatedProduct.code);
             setLoading(false);
@@ -159,6 +192,9 @@ export default function ProductInfoScreen() {
         
         setProduct(validatedProduct);
         setDataSource('asyncstorage');
+        
+        // 🆕 CARGAR IMAGEN DESDE CACHE
+        await loadProductImage(validatedProduct.code);
         
         // PASO 4: Agregar al sistema integrado para próximas veces
         addProductToData({
@@ -464,8 +500,12 @@ export default function ProductInfoScreen() {
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.productInfoContainer}>
-          {/* Component 1: Product Header (Image and Name) */}
-          <ProductHeader product={product} />
+          {/* Component 1: Product Header (Image and Name) - 🆕 CON IMAGEN DESDE CACHE */}
+          <ProductHeader 
+            product={product} 
+            imageUri={productImageUri}
+            imageLoading={imageLoading}
+          />
           
           <View style={styles.divider} />
           
@@ -519,6 +559,9 @@ export default function ProductInfoScreen() {
               </Text>
               <Text style={{ fontSize: 11, color: '#666' }}>
                 Product Code: {product.code}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#666' }}>
+                Image Status: {productImageUri ? '✅ Loaded' : imageLoading ? '⏳ Loading' : '❌ No Image'}
               </Text>
             </View>
           )}
