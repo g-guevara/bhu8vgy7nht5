@@ -9,13 +9,17 @@ interface ProductHeaderProps {
 }
 
 const ProductHeader: React.FC<ProductHeaderProps> = ({ product }) => {
-  // 🔧 FIX: Verificar que product.code existe antes de usar startsWith
-  const isOrganic = product?.code?.startsWith('SSS') || false;
+  // 🔧 FIX MEJORADO: Verificar que product.code existe Y es un string antes de usar startsWith
+  const isOrganic = (product?.code && typeof product.code === 'string' && product.code.startsWith('SSS')) || false;
 
   const getDefaultEmoji = (): string => {
-    // 🔧 FIX: Verificar que las propiedades existen antes de usarlas
-    const name = (product?.product_name || '').toLowerCase();
-    const ingredients = (product?.ingredients_text || '').toLowerCase();
+    // 🔧 FIX: Verificar que las propiedades existen Y son strings antes de usarlas
+    const name = (product?.product_name && typeof product.product_name === 'string') 
+      ? product.product_name.toLowerCase() 
+      : '';
+    const ingredients = (product?.ingredients_text && typeof product.ingredients_text === 'string') 
+      ? product.ingredients_text.toLowerCase() 
+      : '';
 
     if (name.includes('peanut') || ingredients.includes('peanut')) return '🥜';
     if (name.includes('hafer') || ingredients.includes('hafer')) return '🌾';
@@ -23,8 +27,8 @@ const ProductHeader: React.FC<ProductHeaderProps> = ({ product }) => {
     return '🍽️';
   };
 
-  // 🔧 FIX: Verificar que product existe
-  if (!product) {
+  // 🔧 FIX: Verificar que product existe y tiene las propiedades mínimas
+  if (!product || !product.product_name) {
     return (
       <View style={styles.imageContainer}>
         <View style={styles.placeholderContainer}>

@@ -1,5 +1,5 @@
 // app/screens/ProductInfoScreen.tsx
-// Version: 4.0.0 - Con sistema de datos integrado simplificado
+// Version: 4.1.0 - Con validación de datos corregida para el error startsWith
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -63,6 +63,51 @@ export default function ProductInfoScreen() {
   
   // Load the product when the component mounts
   useEffect(() => {
+    /**
+     * Valida y normaliza los datos del producto para asegurar que tengan el formato correcto
+     */
+    const validateAndNormalizeProduct = (rawProduct: any): Product | null => {
+      try {
+        // Verificar que el objeto básico existe
+        if (!rawProduct || typeof rawProduct !== 'object') {
+          console.error('❌ Product data is not a valid object:', rawProduct);
+          return null;
+        }
+
+        // Verificar que code existe y convertirlo a string si es necesario
+        if (!rawProduct.code) {
+          console.error('❌ Product missing code:', rawProduct);
+          return null;
+        }
+
+        // Normalizar las propiedades asegurándose de que sean strings
+        const normalizedProduct: Product = {
+          code: String(rawProduct.code).trim(),
+          product_name: String(rawProduct.product_name || 'Unknown Product').trim(),
+          brands: String(rawProduct.brands || 'Unknown Brand').trim(),
+          ingredients_text: String(rawProduct.ingredients_text || '').trim(),
+          image_url: rawProduct.image_url ? String(rawProduct.image_url).trim() : undefined
+        };
+
+        // Validar que code no esté vacío después de la normalización
+        if (!normalizedProduct.code) {
+          console.error('❌ Product code is empty after normalization');
+          return null;
+        }
+
+        console.log('✅ Product validated and normalized:', {
+          code: normalizedProduct.code,
+          name: normalizedProduct.product_name,
+          hasImage: !!normalizedProduct.image_url
+        });
+
+        return normalizedProduct;
+      } catch (error) {
+        console.error('❌ Error validating product:', error);
+        return null;
+      }
+    };
+
     const loadProduct = async () => {
       try {
         console.log('🔍 Loading product information...');
@@ -79,7 +124,7 @@ export default function ProductInfoScreen() {
         if (!productCode) {
           throw new Error('Invalid product code');
         }
-        
+
         console.log(`📦 Loading product: ${productCode}`);
         
         // PASO 2: Buscar en el sistema de datos integrado
@@ -87,41 +132,48 @@ export default function ProductInfoScreen() {
         
         if (integratedProduct) {
           console.log(`💾 Product found in integrated data system`);
-          setProduct(integratedProduct);
-          setDataSource('integrated');
           
-          showToast('Loaded from integrated data', 'success');
-          
-          // Cargar estadísticas
-          loadDataStats();
-          
-          // Buscar notas existentes
-          fetchExistingNotes(integratedProduct.code);
-          setLoading(false);
-          return;
+          // 🔧 VALIDAR PRODUCTO INTEGRADO
+          const validatedProduct = validateAndNormalizeProduct(integratedProduct);
+          if (validatedProduct) {
+            setProduct(validatedProduct);
+            setDataSource('integrated');
+            showToast('Loaded from integrated data', 'success');
+            loadDataStats();
+            fetchExistingNotes(validatedProduct.code);
+            setLoading(false);
+            return;
+          } else {
+            console.log('❌ Integrated product failed validation, falling back to AsyncStorage');
+          }
         }
         
         // PASO 3: Si no está en datos integrados, usar AsyncStorage como fallback
         console.log(`🗄️ Product not in integrated data, using AsyncStorage fallback`);
-        setProduct(tempProduct);
+        
+        // 🔧 VALIDAR PRODUCTO DE ASYNCSTORAGE
+        const validatedProduct = validateAndNormalizeProduct(tempProduct);
+        if (!validatedProduct) {
+          throw new Error('Invalid product data from AsyncStorage');
+        }
+        
+        setProduct(validatedProduct);
         setDataSource('asyncstorage');
         
         // PASO 4: Agregar al sistema integrado para próximas veces
         addProductToData({
-          code: tempProduct.code,
-          product_name: tempProduct.product_name,
-          brands: tempProduct.brands,
-          ingredients_text: tempProduct.ingredients_text,
-          image_url: tempProduct.image_url
+          code: validatedProduct.code,
+          product_name: validatedProduct.product_name,
+          brands: validatedProduct.brands,
+          ingredients_text: validatedProduct.ingredients_text,
+          image_url: validatedProduct.image_url
         });
         
         console.log(`💾 Product added to integrated data system for future access`);
         
-        // Cargar estadísticas
+        // Cargar estadísticas y notas
         loadDataStats();
-        
-        // Buscar notas existentes
-        fetchExistingNotes(tempProduct.code);
+        fetchExistingNotes(validatedProduct.code);
         
       } catch (error) {
         console.error('❌ Error loading product:', error);
