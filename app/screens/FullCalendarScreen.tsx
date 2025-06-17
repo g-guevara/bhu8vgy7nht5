@@ -145,7 +145,7 @@ export default function FullCalendarScreen(): JSX.Element {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#007AFF" />
+          <Ionicons name="chevron-back" size={28} color="#000" />
           <Text style={styles.backText}>Test</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Calendar</Text>

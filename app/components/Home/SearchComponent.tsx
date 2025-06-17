@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - Actualizado para usar productData.ts integrado
+// app/components/Home/SearchComponent.tsx - Corregido para TypeScript
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -213,7 +213,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             product_name: product.product_name,
             brands: product.brands,
             ingredients_text: product.ingredients_text,
-            image_url: product.image_url
+            // 🔧 FIX: Usar imageUri en lugar de image_url para consistencia
+            image_url: product.imageUri || undefined
           }));
           
           addProductsToData(productsToCache);
@@ -288,7 +289,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         product_name: product.product_name,
         brands: product.brands,
         ingredients_text: product.ingredients_text,
-        image_url: product.image_url
+        // 🔧 FIX: Usar imageUri en lugar de image_url
+        image_url: product.imageUri || undefined
       }]);
     }
     
@@ -525,7 +527,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                       currentPage === getTotalPages() && searchStyles.paginationButtonTextDisabled
                     ]}>›</Text>
                   </TouchableOpacity>
-                </View>
+                  </View>
               )}
             </View>
           </>
