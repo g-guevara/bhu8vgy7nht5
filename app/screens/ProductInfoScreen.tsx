@@ -1,5 +1,5 @@
 // app/screens/ProductInfoScreen.tsx
-// Version: 3.0.0 - Con sistema de cache inteligente
+// Version: 4.0.0 - Con sistema de datos integrado simplificado
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -14,11 +14,17 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Product } from '../data/productData';
 import { styles } from '../styles/ProductInfoStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
-import { ProductCacheAPI, CachedProduct } from '../utils/productCacheUtils';
+
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE DATOS INTEGRADO
+import { 
+  Product, 
+  findProductInData, 
+  addProductToData,
+  getProductDataStats 
+} from '../data/productData';
 
 // Import components
 import ProductHeader from '../components/ProductInfo/ProductHeader';
@@ -41,7 +47,14 @@ export default function ProductInfoScreen() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [existingNote, setExistingNote] = useState<any>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [loadSource, setLoadSource] = useState<'cache' | 'storage' | 'none'>('none');
+  
+  // 🆕 Estado para información del sistema de datos
+  const [dataSource, setDataSource] = useState<'integrated' | 'asyncstorage' | 'none'>('none');
+  const [dataStats, setDataStats] = useState<{
+    totalProducts: number;
+    cachedProducts: number;
+    cacheSizeKB: number;
+  } | null>(null);
   
   // References for auto-save functionality
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -54,7 +67,7 @@ export default function ProductInfoScreen() {
       try {
         console.log('🔍 Loading product information...');
         
-        // PASO 1: Intentar obtener código del producto de AsyncStorage
+        // PASO 1: Obtener código del producto de AsyncStorage
         const productJson = await AsyncStorage.getItem('selectedProduct');
         if (!productJson) {
           throw new Error('No product selected');
@@ -69,30 +82,32 @@ export default function ProductInfoScreen() {
         
         console.log(`📦 Loading product: ${productCode}`);
         
-        // PASO 2: Intentar cargar desde cache inteligente primero
-        const cachedProduct = await ProductCacheAPI.getProduct(productCode);
+        // PASO 2: Buscar en el sistema de datos integrado
+        const integratedProduct = findProductInData(productCode);
         
-        if (cachedProduct) {
-          console.log(`💾 Product loaded from intelligent cache`);
-          setProduct(cachedProduct);
-          setLoadSource('cache');
+        if (integratedProduct) {
+          console.log(`💾 Product found in integrated data system`);
+          setProduct(integratedProduct);
+          setDataSource('integrated');
           
-          // Mostrar toast discreto indicando carga desde cache
-          showToast('Loaded from cache', 'success');
+          showToast('Loaded from integrated data', 'success');
           
-          // After loading from cache, check if there are existing notes
-          fetchExistingNotes(cachedProduct.code);
+          // Cargar estadísticas
+          loadDataStats();
+          
+          // Buscar notas existentes
+          fetchExistingNotes(integratedProduct.code);
           setLoading(false);
           return;
         }
         
-        // PASO 3: Si no está en cache, usar AsyncStorage como fallback
-        console.log(`🗄️ Product not in cache, using fallback from AsyncStorage`);
+        // PASO 3: Si no está en datos integrados, usar AsyncStorage como fallback
+        console.log(`🗄️ Product not in integrated data, using AsyncStorage fallback`);
         setProduct(tempProduct);
-        setLoadSource('storage');
+        setDataSource('asyncstorage');
         
-        // PASO 4: Guardar en cache para próximas veces
-        await ProductCacheAPI.setProduct({
+        // PASO 4: Agregar al sistema integrado para próximas veces
+        addProductToData({
           code: tempProduct.code,
           product_name: tempProduct.product_name,
           brands: tempProduct.brands,
@@ -100,9 +115,12 @@ export default function ProductInfoScreen() {
           image_url: tempProduct.image_url
         });
         
-        console.log(`💾 Product saved to intelligent cache for future access`);
+        console.log(`💾 Product added to integrated data system for future access`);
         
-        // After loading product, check if there are existing notes
+        // Cargar estadísticas
+        loadDataStats();
+        
+        // Buscar notas existentes
         fetchExistingNotes(tempProduct.code);
         
       } catch (error) {
@@ -135,6 +153,20 @@ export default function ProductInfoScreen() {
       saveNotesIfChanged();
     };
   }, []);
+
+  // 🆕 Cargar estadísticas del sistema de datos
+  const loadDataStats = async () => {
+    try {
+      const stats = await getProductDataStats();
+      setDataStats({
+        totalProducts: stats.totalProducts,
+        cachedProducts: stats.cachedProducts,
+        cacheSizeKB: stats.cacheSizeKB
+      });
+    } catch (error) {
+      console.error('Error loading data stats:', error);
+    }
+  };
   
   // Effect for handling auto-save
   useEffect(() => {
@@ -279,23 +311,23 @@ export default function ProductInfoScreen() {
     });
   };
 
-  // 🆕 Función para mostrar estadísticas del cache (solo en desarrollo)
-  const showCacheStats = async () => {
+  // 🆕 Función para mostrar estadísticas del sistema (solo en desarrollo)
+  const showDataStats = async () => {
     if (!__DEV__) return;
     
     try {
-      const stats = await ProductCacheAPI.getStats();
-      console.log('📊 Product Cache Stats:', {
+      const stats = await getProductDataStats();
+      console.log('📊 Integrated Data Stats:', {
         totalProducts: stats.totalProducts,
-        cacheSizeMB: stats.totalSizeMB,
-        hitRate: `${stats.cacheHitRate}%`,
-        oldestProduct: stats.oldestProductAge,
+        cachedProducts: stats.cachedProducts,
+        originalProducts: stats.originalProducts,
+        cacheSizeKB: stats.cacheSizeKB,
         mostAccessed: stats.mostAccessedProduct?.product_name
       });
       
-      showToast(`Cache: ${stats.totalProducts} products, ${stats.cacheHitRate}% hit rate`, 'success');
+      showToast(`Data: ${stats.totalProducts} products, ${stats.cacheSizeKB}KB`, 'success');
     } catch (error) {
-      console.error('Error getting cache stats:', error);
+      console.error('Error getting data stats:', error);
     }
   };
 
@@ -312,7 +344,7 @@ export default function ProductInfoScreen() {
           {/* 🆕 Botón de estadísticas en desarrollo */}
           {__DEV__ && (
             <TouchableOpacity 
-              onPress={showCacheStats}
+              onPress={showDataStats}
               style={{ position: 'absolute', right: 16, padding: 8 }}
             >
               <Text style={{ fontSize: 16 }}>📊</Text>
@@ -360,18 +392,18 @@ export default function ProductInfoScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Information</Text>
         
-        {/* 🆕 Indicador de fuente de carga y botón de estadísticas en desarrollo */}
+        {/* 🆕 Indicador de fuente de datos y botón de estadísticas en desarrollo */}
         {__DEV__ && (
           <View style={{ position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ 
               fontSize: 12, 
-              color: loadSource === 'cache' ? '#34C759' : '#666',
+              color: dataSource === 'integrated' ? '#34C759' : '#666',
               marginRight: 8,
               fontWeight: '600'
             }}>
-              {loadSource === 'cache' ? '💾' : '🗄️'}
+              {dataSource === 'integrated' ? '💾' : '🗄️'}
             </Text>
-            <TouchableOpacity onPress={showCacheStats} style={{ padding: 8 }}>
+            <TouchableOpacity onPress={showDataStats} style={{ padding: 8 }}>
               <Text style={{ fontSize: 16 }}>📊</Text>
             </TouchableOpacity>
           </View>
@@ -414,8 +446,8 @@ export default function ProductInfoScreen() {
             characterLimit={NOTES_CHARACTER_LIMIT}
           />
           
-          {/* 🆕 Información del cache (solo en desarrollo) */}
-          {__DEV__ && (
+          {/* 🆕 Información del sistema de datos (solo en desarrollo) */}
+          {__DEV__ && dataStats && (
             <View style={{
               marginTop: 20,
               padding: 12,
@@ -428,7 +460,10 @@ export default function ProductInfoScreen() {
                 🔧 Development Info
               </Text>
               <Text style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
-                Loaded from: {loadSource === 'cache' ? 'Intelligent Cache 💾' : 'AsyncStorage 🗄️'}
+                Source: {dataSource === 'integrated' ? 'Integrated Data System 💾' : 'AsyncStorage Fallback 🗄️'}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#666' }}>
+                Total Products: {dataStats.totalProducts} ({dataStats.cachedProducts} cached, {dataStats.cacheSizeKB}KB)
               </Text>
               <Text style={{ fontSize: 11, color: '#666' }}>
                 Product Code: {product.code}

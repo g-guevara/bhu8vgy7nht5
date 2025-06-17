@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - Con precarga inteligente de cache
+// app/components/Home/SearchComponent.tsx - Actualizado para usar productData.ts integrado
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -15,8 +15,15 @@ import {
   handleProductPress as handleProductPressUtil
 } from './productUtils';
 
-
-import { ProductCacheAPI } from '../../utils/productCacheUtils';
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE PRODUCT DATA
+import { 
+  sampleProducts, 
+  addProductsToData, 
+  findProductInData,
+  searchProductsInData,
+  getProductDataStats,
+  Product 
+} from '../../data/productData';
 
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
@@ -30,12 +37,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   
-  // 🆕 Estados para cache
-  const [cachingProgress, setCachingProgress] = useState<{
-    isActive: boolean;
-    processed: number;
-    total: number;
-  }>({ isActive: false, processed: 0, total: 0 });
+  // 🆕 Estados para mostrar información del cache
+  const [cacheStats, setCacheStats] = useState<{
+    totalProducts: number;
+    cachedProducts: number;
+    cacheSizeKB: number;
+  } | null>(null);
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,7 +53,22 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
 
   useEffect(() => {
     loadHistoryFromStorage();
+    loadCacheStats();
   }, []);
+
+  // 🆕 Cargar estadísticas del cache
+  const loadCacheStats = async () => {
+    try {
+      const stats = await getProductDataStats();
+      setCacheStats({
+        totalProducts: stats.totalProducts,
+        cachedProducts: stats.cachedProducts,
+        cacheSizeKB: stats.cacheSizeKB
+      });
+    } catch (error) {
+      console.error('Error loading cache stats:', error);
+    }
+  };
 
   const loadHistoryFromStorage = async () => {
     setLoadingHistory(true);
@@ -59,11 +81,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         for (const historyItem of historyData.slice(0, MAX_HISTORY_ITEMS)) {
           try {
-            // 🆕 PRIMERO: Intentar cargar desde cache inteligente
-            const cachedProduct = await ProductCacheAPI.getProduct(historyItem.code);
+            // 🆕 PRIMERO: Buscar en productData.ts integrado
+            const cachedProduct = findProductInData(historyItem.code);
             
             if (cachedProduct) {
-              console.log(`💾 History item ${historyItem.code} loaded from cache`);
+              console.log(`💾 History item ${historyItem.code} found in integrated data`);
               historyProducts.push({
                 ...cachedProduct,
                 relevanceScore: 1000,
@@ -71,10 +93,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                 imageLoading: false,
                 imageError: false
               });
-              continue; // Pasar al siguiente item
+              continue;
             }
             
-            // FALLBACK: Si no está en cache, usar el método original
+            // FALLBACK: Si no está en datos integrados, buscar en API
             const collectionInfo = getCollectionForSearchTerm(historyItem.code);
             if (collectionInfo) {
               const response = await fetch(`${collectionInfo.uri}/api/search/code/${historyItem.code}`);
@@ -91,14 +113,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                     imageError: false
                   });
                   
-                  // 🆕 Guardar en cache para próximas veces
-                  await ProductCacheAPI.setProduct({
-                    code: product.code,
-                    product_name: product.product_name,
-                    brands: product.brands,
-                    ingredients_text: product.ingredients_text,
-                    image_url: product.image_url
-                  });
+                  // 🆕 Agregar al sistema integrado para próximas veces
+                  addProductsToData([product]);
+                  
+                  // Actualizar estadísticas
+                  loadCacheStats();
                 }
               }
             }
@@ -108,7 +127,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         }
         
         setHistoryItems(historyProducts);
-        // 🎯 OPTIMIZACIÓN: Cargar imágenes para items del historial (pocos items)
+        
+        // Cargar imágenes para items del historial
         if (historyProducts.length > 0) {
           loadImagesForProducts(historyProducts, setHistoryItems);
         }
@@ -154,60 +174,66 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // 🆕 FUNCIÓN PARA PRECARGAR PRODUCTOS EN CACHE
-  const preloadProductsToCache = async (products: ProductWithImageAndEmoji[]) => {
-    if (products.length === 0) return;
+  // 🆕 FUNCIÓN DE BÚSQUEDA HÍBRIDA (cache local + API)
+  const performHybridSearch = async (searchQuery: string): Promise<ProductWithImageAndEmoji[]> => {
+    const results: ProductWithImageAndEmoji[] = [];
     
-    try {
-      setCachingProgress({ isActive: true, processed: 0, total: products.length });
-      
-      console.log(`🚀 Starting to preload ${products.length} products to cache...`);
-      
-      // Procesar en lotes de 10 para mejor performance
-      const batchSize = 10;
-      let processed = 0;
-      
-      for (let i = 0; i < products.length; i += batchSize) {
-        const batch = products.slice(i, i + batchSize);
+    // 1. Buscar primero en datos locales/cache
+    const localResults = searchProductsInData(searchQuery, 20);
+    console.log(`🔍 Found ${localResults.length} local results for "${searchQuery}"`);
+    
+    // Convertir resultados locales al formato esperado
+    localResults.forEach(product => {
+      results.push({
+        ...product,
+        relevanceScore: 1500, // Mayor prioridad para resultados locales
+        imageUri: null,
+        imageLoading: false,
+        imageError: false
+      });
+    });
+    
+    // 2. Si hay pocos resultados locales, buscar en API
+    if (results.length < 10) {
+      try {
+        console.log(`🌐 Searching API for additional results for "${searchQuery}"`);
+        const apiResults = await searchInSpecificCollection(searchQuery);
         
-        // Preparar productos para cache
-        const productsToCache = batch.map(product => ({
-          code: product.code,
-          product_name: product.product_name,
-          brands: product.brands,
-          ingredients_text: product.ingredients_text,
-          image_url: product.image_url
-        }));
+        // Filtrar resultados que ya tenemos localmente
+        const newApiResults = apiResults.filter(apiProduct => 
+          !results.some(localProduct => localProduct.code === apiProduct.code)
+        );
         
-        // Precargar lote
-        await ProductCacheAPI.preloadProducts(productsToCache);
+        console.log(`🌐 Found ${newApiResults.length} new API results`);
         
-        processed += batch.length;
-        setCachingProgress(prev => ({ ...prev, processed }));
+        // Agregar resultados de API al cache para próximas búsquedas
+        if (newApiResults.length > 0) {
+          const productsToCache = newApiResults.map(product => ({
+            code: product.code,
+            product_name: product.product_name,
+            brands: product.brands,
+            ingredients_text: product.ingredients_text,
+            image_url: product.image_url
+          }));
+          
+          addProductsToData(productsToCache);
+          console.log(`💾 Added ${productsToCache.length} new products to integrated data`);
+          
+          // Actualizar estadísticas
+          loadCacheStats();
+        }
         
-        // Pequeña pausa para no bloquear la UI
-        await new Promise(resolve => setTimeout(resolve, 50));
+        results.push(...newApiResults);
+      } catch (error) {
+        console.error('❌ Error in API search:', error);
       }
-      
-      console.log(`✅ Successfully preloaded ${processed} products to cache`);
-      
-      // Mostrar estadísticas en desarrollo
-      if (__DEV__) {
-        const stats = await ProductCacheAPI.getStats();
-        console.log(`📊 Cache now contains ${stats.totalProducts} products (${stats.totalSizeMB}MB)`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error preloading products to cache:', error);
-    } finally {
-      // Ocultar indicador después de un pequeño delay
-      setTimeout(() => {
-        setCachingProgress({ isActive: false, processed: 0, total: 0 });
-      }, 1000);
     }
+    
+    // 3. Ordenar por relevancia
+    return results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   };
 
-  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON PRECARGA
+  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
@@ -220,41 +246,33 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     setSearchLoading(true);
     setCurrentPage(1);
     try {
-      console.log(`🔍 Iniciando búsqueda: "${searchQuery}"`);
+      console.log(`🔍 Starting hybrid search for: "${searchQuery}"`);
       
-      // Usar la función de búsqueda del archivo searchLogic
-      const results = await searchInSpecificCollection(searchQuery);
+      // Usar búsqueda híbrida
+      const results = await performHybridSearch(searchQuery);
       
       setSearchResults(results);
       
-      console.log(`✅ Búsqueda completada: ${results.length} resultados`);
+      console.log(`✅ Hybrid search completed: ${results.length} total results`);
       
-      // 🎯 OPTIMIZACIÓN: Solo cargar imágenes de la primera página
+      // Cargar imágenes solo para la primera página
       if (results.length > 0) {
         const firstPageResults = results.slice(0, RESULTS_PER_PAGE);
         loadImagesForProducts(firstPageResults, setSearchResults);
-        console.log(`📸 Cargando imágenes solo para los primeros ${firstPageResults.length} productos`);
-        
-        // 🆕 NUEVA FUNCIONALIDAD: Precargar productos en cache en background
-        // Solo precargar si hay más de 5 resultados para que valga la pena
-        if (results.length > 5) {
-          // Ejecutar en background sin bloquear la UI
-          setTimeout(() => {
-            preloadProductsToCache(results);
-          }, 500); // Delay de 500ms para que la UI se actualice primero
-        }
+        console.log(`📸 Loading images for first ${firstPageResults.length} products`);
       }
       
       // Mostrar top 3 para debugging
       if (__DEV__ && results.length > 0) {
-        console.log('🏆 Top 3 resultados:');
+        console.log('🏆 Top 3 results:');
         results.slice(0, 3).forEach((r: ProductWithImageAndEmoji, i: number) => {
-          console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore}`);
+          const source = r.relevanceScore >= 1500 ? 'Local' : 'API';
+          console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore} [${source}]`);
         });
       }
       
     } catch (error) {
-      console.error('❌ Error en búsqueda:', error);
+      console.error('❌ Error in hybrid search:', error);
       setSearchResults([]);
     } finally {
       setSearchLoading(false);
@@ -262,17 +280,16 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   };
 
   const handleProductPress = async (product: ProductWithImageAndEmoji) => {
-    // 🆕 Asegurar que el producto esté en cache antes de navegar
-    try {
-      await ProductCacheAPI.setProduct({
+    // Agregar producto al sistema integrado si no existe
+    const existingProduct = findProductInData(product.code);
+    if (!existingProduct) {
+      addProductsToData([{
         code: product.code,
         product_name: product.product_name,
         brands: product.brands,
         ingredients_text: product.ingredients_text,
         image_url: product.image_url
-      });
-    } catch (error) {
-      console.error('Error caching product before navigation:', error);
+      }]);
     }
     
     await handleProductPressUtil(product, router);
@@ -285,7 +302,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     return `DB${info.db} - ${info.collection}`;
   };
 
-  // Funciones de paginación
+  // Funciones de paginación (sin cambios)
   const getTotalPages = () => Math.ceil(searchResults.length / RESULTS_PER_PAGE);
   
   const getCurrentPageResults = () => {
@@ -299,21 +316,17 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
       
-      // 🎯 OPTIMIZACIÓN: Cargar imágenes solo de la nueva página
       const startIndex = (page - 1) * RESULTS_PER_PAGE;
       const endIndex = startIndex + RESULTS_PER_PAGE;
       const pageResults = searchResults.slice(startIndex, endIndex);
       
-      // Filtrar solo productos que no tienen imagen cargada aún
       const productsNeedingImages = pageResults.filter(product => 
         !product.imageUri && !product.imageLoading && !product.imageError
       );
       
       if (productsNeedingImages.length > 0) {
-        console.log(`📸 Página ${page}: Cargando imágenes para ${productsNeedingImages.length} productos nuevos`);
+        console.log(`📸 Page ${page}: Loading images for ${productsNeedingImages.length} new products`);
         loadImagesForProducts(productsNeedingImages, setSearchResults);
-      } else {
-        console.log(`✅ Página ${page}: Todas las imágenes ya están cargadas`);
       }
     }
   };
@@ -326,7 +339,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
     let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
     
-    // Ajustar si estamos cerca del final
     if (endPage - startPage + 1 < maxVisiblePages) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
@@ -349,7 +361,9 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
           {product.product_name}
           {__DEV__ && (
-            <Text style={{ color: '#999', fontSize: 12 }}> ({product.relevanceScore})</Text>
+            <Text style={{ color: '#999', fontSize: 12 }}>
+              {' '}({product.relevanceScore >= 1500 ? 'Local' : 'API'}: {product.relevanceScore})
+            </Text>
           )}
         </Text>
         <Text style={searchStyles.productBrand} numberOfLines={1} ellipsizeMode="tail">
@@ -378,7 +392,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           returnKeyType="search"
         />
         
-        {/* BOTÓN DE BÚSQUEDA */}
         <TouchableOpacity
           style={[
             searchStyles.searchButton,
@@ -409,8 +422,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         ) : null}
       </View>
 
-      {/* 🆕 INDICADOR DE PROGRESO DE CACHE */}
-      {cachingProgress.isActive && (
+      {/* 🆕 INFORMACIÓN DEL CACHE INTEGRADO (solo en desarrollo) */}
+      {__DEV__ && cacheStats && (
         <View style={{
           paddingHorizontal: 20,
           paddingVertical: 8,
@@ -418,37 +431,14 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           borderBottomWidth: 1,
           borderBottomColor: '#e0e0e0'
         }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 12, color: '#666', fontWeight: '500' }}>
-              💾 Caching products for faster access...
-            </Text>
-            <Text style={{ fontSize: 12, color: '#666' }}>
-              {cachingProgress.processed}/{cachingProgress.total}
-            </Text>
-          </View>
-          <View style={{
-            height: 2,
-            backgroundColor: '#e0e0e0',
-            borderRadius: 1,
-            marginTop: 4,
-            overflow: 'hidden'
-          }}>
-            <View style={{
-              height: '100%',
-              backgroundColor: '#007AFF',
-              width: `${(cachingProgress.processed / cachingProgress.total) * 100}%`,
-              borderRadius: 1
-            }} />
-          </View>
-        </View>
-      )}
-
-      {/* Info de debugging en desarrollo */}
-      {__DEV__ && searchText && (
-        <View style={{ paddingHorizontal: 20, paddingVertical: 5 }}>
-          <Text style={{ fontSize: 12, color: '#666' }}>
-            🎯 Colección: {getCollectionInfo(searchText)}
+          <Text style={{ fontSize: 12, color: '#666', fontWeight: '500' }}>
+            💾 Integrated Data: {cacheStats.totalProducts} total ({cacheStats.cachedProducts} cached, {cacheStats.cacheSizeKB}KB)
           </Text>
+          {searchText && (
+            <Text style={{ fontSize: 12, color: '#666' }}>
+              🎯 Collection: {getCollectionInfo(searchText)}
+            </Text>
+          )}
         </View>
       )}
 
@@ -468,29 +458,26 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           <View style={searchStyles.noResultsContainer}>
             <ActivityIndicator size="large" color="#000000" />
             <Text style={searchStyles.noResultsSubtext}>
-              Searching in {getCollectionInfo(searchText)}...
+              Searching locally and remotely...
             </Text>
           </View>
         ) : searchText && searchResults.length > 0 ? (
           <>
-            {/* Resultados de la página actual */}
             {getCurrentPageResults().map(product => renderProductClickable(product))}
 
-            {/* Información y controles de paginación al final */}
+            {/* Controles de paginación */}
             <View style={searchStyles.paginationContainer}>
               <View style={searchStyles.paginationInfo}>
                 <Text style={searchStyles.paginationInfoText}>
-                  Mostrando {((currentPage - 1) * RESULTS_PER_PAGE) + 1}-{Math.min(currentPage * RESULTS_PER_PAGE, searchResults.length)} de {searchResults.length} resultados
+                  Showing {((currentPage - 1) * RESULTS_PER_PAGE) + 1}-{Math.min(currentPage * RESULTS_PER_PAGE, searchResults.length)} of {searchResults.length} results
                 </Text>
                 <Text style={searchStyles.paginationInfoText}>
-                  Página {currentPage} de {getTotalPages()}
+                  Page {currentPage} of {getTotalPages()}
                 </Text>
               </View>
 
-              {/* Controles de paginación */}
               {getTotalPages() > 1 && (
                 <View style={searchStyles.paginationControls}>
-                  {/* Botón Anterior */}
                   <TouchableOpacity
                     style={[
                       searchStyles.paginationButton,
@@ -505,7 +492,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                     ]}>‹</Text>
                   </TouchableOpacity>
 
-                  {/* Números de página */}
                   <View style={searchStyles.paginationPageNumbers}>
                     {getPageNumbers().map(pageNum => (
                       <TouchableOpacity
@@ -526,7 +512,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
                     ))}
                   </View>
 
-                  {/* Botón Siguiente */}
                   <TouchableOpacity
                     style={[
                       searchStyles.paginationButton,
@@ -548,7 +533,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>
-              Searched in collection: {getCollectionInfo(searchText)}
+              Searched locally and in: {getCollectionInfo(searchText)}
             </Text>
           </View>
         ) : loadingHistory ? (
