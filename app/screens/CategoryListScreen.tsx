@@ -1,4 +1,4 @@
-// app/screens/CategoryListScreen.tsx - FINAL FIX: Handle mixed API and local products
+// app/screens/CategoryListScreen.tsx - CORREGIDO CON CACHE DE IMÁGENES
 import React, { useEffect, useState } from 'react';
 import { 
   SafeAreaView, 
@@ -10,10 +10,12 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleProducts } from '../data/productData';
 import { styles } from '../styles/CategoryListStyles';
+// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
+import { imageCacheUtils } from '../utils/imageCacheUtils';
 
 // Define the Product interface if not imported
 interface Product {
@@ -24,11 +26,19 @@ interface Product {
   image_url?: string;
 }
 
+// 🆕 INTERFAZ EXTENDIDA PARA PRODUCTOS CON CACHE DE IMÁGENES
+interface ProductWithImage extends Product {
+  imageUri?: string | null;
+  imageLoading?: boolean;
+  imageError?: boolean;
+}
+
 export default function CategoryListScreen() {
   const router = useRouter();
   const { category, brand } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
+  // 🆕 CAMBIAR TIPO DE ESTADO PARA INCLUIR IMAGEN CACHE
+  const [products, setProducts] = useState<ProductWithImage[]>([]);
 
   useEffect(() => {
     const loadProducts = () => {
@@ -82,7 +92,21 @@ export default function CategoryListScreen() {
           console.log(`✅ Including: ${p.code} - ${p.product_name} (${p.brands})`);
         });
         
-        setProducts(filteredProducts);
+        // 🆕 CONVERTIR A PRODUCTOS CON CACHE DE IMÁGENES
+        const productsWithImageState: ProductWithImage[] = filteredProducts.map(product => ({
+          ...product,
+          imageUri: null,
+          imageLoading: false,
+          imageError: false
+        }));
+        
+        setProducts(productsWithImageState);
+        
+        // 🆕 CARGAR IMÁGENES DESPUÉS DE CONFIGURAR LOS PRODUCTOS
+        if (productsWithImageState.length > 0) {
+          console.log(`🚀 [CategoryList] Iniciando carga de imágenes para ${productsWithImageState.length} productos`);
+          loadImagesForProducts(productsWithImageState);
+        }
       } catch (error) {
         console.error('❌ Error filtering products:', error);
         setProducts([]);
@@ -93,6 +117,90 @@ export default function CategoryListScreen() {
 
     loadProducts();
   }, [brand]);
+
+  // 🆕 FUNCIÓN PARA CARGAR IMÁGENES DESDE CACHE
+  const loadImagesForProducts = async (products: ProductWithImage[]) => {
+    console.log(`🖼️ [CategoryList] Cargando imágenes para ${products.length} productos...`);
+    
+    // Procesar productos con un pequeño delay para evitar sobrecarga
+    for (let i = 0; i < products.length; i++) {
+      setTimeout(() => loadProductImage(products[i]), i * 100);
+    }
+  };
+
+  // 🆕 FUNCIÓN PARA CARGAR IMAGEN DE UN PRODUCTO ESPECÍFICO
+  const loadProductImage = async (product: ProductWithImage) => {
+    try {
+      // Marcar como cargando
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
+        )
+      );
+
+      console.log(`🔍 [CategoryList] Buscando imagen para producto: ${product.code}`);
+      
+      // 🚀 PRIORIZAR IMAGE_URL SI EXISTE (Google Photos, etc.)
+      if (product.image_url && product.image_url.trim()) {
+        console.log(`🖼️ [CategoryList] Usando image_url directa para ${product.code}: ${product.image_url}`);
+        
+        // Actualizar con la URL directa (Google Photos)
+        setProducts(prevProducts => 
+          prevProducts.map(p => 
+            p.code === product.code ? { 
+              ...p, 
+              imageUri: product.image_url,
+              imageLoading: false, 
+              imageError: false 
+            } : p
+          )
+        );
+        
+        console.log(`✅ [CategoryList] Imagen directa configurada para producto: ${product.code}`);
+        return;
+      }
+      
+      // 🔍 FALLBACK: Buscar en OpenFoodFacts solo si NO tiene image_url
+      console.log(`🌐 [CategoryList] No tiene image_url, buscando en OpenFoodFacts para: ${product.code}`);
+      
+      // ⏱️ TIMEOUT DE 30 SEGUNDOS
+      const timeoutPromise = new Promise<string | null>((_, reject) => {
+        setTimeout(() => reject(new Error('Image timeout')), 30000);
+      });
+      
+      const imagePromise = imageCacheUtils.getProductImage(product.code);
+      
+      // Race entre la imagen y el timeout
+      const imageUri = await Promise.race([imagePromise, timeoutPromise]);
+      
+      // Actualizar estado con la imagen obtenida
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { 
+            ...p, 
+            imageUri, 
+            imageLoading: false, 
+            imageError: !imageUri 
+          } : p
+        )
+      );
+
+      if (imageUri) {
+        console.log(`✅ [CategoryList] Imagen de OpenFoodFacts cargada para producto: ${product.code}`);
+      } else {
+        console.log(`❌ [CategoryList] No se encontró imagen para producto: ${product.code}`);
+      }
+    } catch (error) {
+      console.error(`❌ [CategoryList] Error cargando imagen para producto ${product.code}:`, error);
+      
+      // Actualizar estado con error
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+        )
+      );
+    }
+  };
 
   const handleProductPress = async (product: Product) => {
     try {
@@ -125,6 +233,54 @@ export default function CategoryListScreen() {
 
   const handleBack = () => {
     router.back();
+  };
+
+  // 🆕 COMPONENTE DE IMAGEN CON CACHE
+  const ProductImageWithCache: React.FC<{ product: ProductWithImage }> = ({ product }) => {
+    if (product.imageLoading) {
+      return (
+        <View style={[styles.productImageContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color="#007AFF" />
+        </View>
+      );
+    }
+
+    if (product.imageUri && !product.imageError) {
+      return (
+        <View style={styles.productImageContainer}>
+          <Image
+            source={{ uri: product.imageUri }}
+            style={styles.productImage}
+            resizeMode="cover"
+            onError={() => {
+              console.log(`❌ [CategoryList] Error loading cached image for ${product.code}`);
+            }}
+          />
+        </View>
+      );
+    }
+
+    // Fallback al placeholder si no hay imagen o hay error
+    return (
+      <View style={styles.productImageContainer}>
+        <View style={{
+          width: '100%',
+          height: '100%',
+          backgroundColor: '#f0f0f0',
+          borderRadius: 12,
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: '#e0e0e0'
+        }}>
+          <MaterialCommunityIcons 
+            name="image" 
+            size={32} 
+            color="#c0c0c0" 
+          />
+        </View>
+      </View>
+    );
   };
 
   // 🔧 DEBUG: Show cache info in development
@@ -195,17 +351,8 @@ export default function CategoryListScreen() {
               style={styles.productItem}
               onPress={() => handleProductPress(item)}
             >
-              <View style={styles.productImageContainer}>
-                {item.image_url ? (
-                  <Image
-                    source={{ uri: item.image_url }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Text style={styles.productEmoji}>{getDefaultEmoji(item)}</Text>
-                )}
-              </View>
+              {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+              <ProductImageWithCache product={item} />
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{item.product_name || 'Unknown Product'}</Text>
                 <Text style={styles.productBrand}>{item.brands || 'Unknown Brand'}</Text>
