@@ -1,4 +1,4 @@
-// app/screens/WishlistScreen.tsx - ACTUALIZADO
+// app/screens/WishlistScreen.tsx - CORREGIDO CON CACHE DE IMÁGENES
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
@@ -13,10 +13,13 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { styles } from '../styles/WishlistStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
 import { sampleProducts } from '../data/productData';
+// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
+import { imageCacheUtils } from '../utils/imageCacheUtils';
 
 // Define interfaces for our data
 interface WishlistItem {
@@ -30,8 +33,15 @@ interface Product {
   code: string;
   product_name: string;
   brands: string;
-  image_url: string;
+  image_url?: string; // 🔧 Hacer opcional para compatibilidad
   ingredients_text: string;
+}
+
+// 🆕 INTERFAZ EXTENDIDA PARA PRODUCTOS CON CACHE DE IMÁGENES
+interface ProductWithImage extends Product {
+  imageUri?: string | null;
+  imageLoading?: boolean;
+  imageError?: boolean;
 }
 
 export default function WishlistScreen() {
@@ -39,8 +49,9 @@ export default function WishlistScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [wishlistProducts, setWishlistProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  // 🆕 CAMBIAR TIPO DE ESTADO PARA INCLUIR IMAGEN CACHE
+  const [wishlistProducts, setWishlistProducts] = useState<ProductWithImage[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<ProductWithImage[]>([]);
   const { showToast } = useToast();
   const router = useRouter();
 
@@ -49,6 +60,76 @@ export default function WishlistScreen() {
     const name = (product.product_name || '').toLowerCase();
     const ingredients = (product.ingredients_text || '').toLowerCase();
     return '';
+  };
+
+  // 🆕 FUNCIÓN PARA CARGAR IMÁGENES DESDE CACHE
+  const loadImagesForProducts = async (products: ProductWithImage[]) => {
+    console.log(`🖼️ [Wishlist] Cargando imágenes para ${products.length} productos...`);
+    
+    // Procesar productos con un pequeño delay para evitar sobrecarga
+    for (let i = 0; i < products.length; i++) {
+      setTimeout(() => loadProductImage(products[i]), i * 100);
+    }
+  };
+
+  // 🆕 FUNCIÓN PARA CARGAR IMAGEN DE UN PRODUCTO ESPECÍFICO
+  const loadProductImage = async (product: ProductWithImage) => {
+    try {
+      // Marcar como cargando
+      setWishlistProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
+        )
+      );
+      setFilteredProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
+        )
+      );
+
+      console.log(`🔍 [Wishlist] Buscando imagen para producto: ${product.code}`);
+      
+      // ⏱️ TIMEOUT DE 30 SEGUNDOS
+      const timeoutPromise = new Promise<string | null>((_, reject) => {
+        setTimeout(() => reject(new Error('Image timeout')), 30000);
+      });
+      
+      const imagePromise = imageCacheUtils.getProductImage(product.code);
+      
+      // Race entre la imagen y el timeout
+      const imageUri = await Promise.race([imagePromise, timeoutPromise]);
+      
+      // Actualizar ambos estados con la imagen obtenida
+      const updateFunction = (prevProducts: ProductWithImage[]) => 
+        prevProducts.map(p => 
+          p.code === product.code ? { 
+            ...p, 
+            imageUri, 
+            imageLoading: false, 
+            imageError: !imageUri 
+          } : p
+        );
+
+      setWishlistProducts(updateFunction);
+      setFilteredProducts(updateFunction);
+
+      if (imageUri) {
+        console.log(`✅ [Wishlist] Imagen cargada para producto: ${product.code}`);
+      } else {
+        console.log(`❌ [Wishlist] No se encontró imagen para producto: ${product.code}`);
+      }
+    } catch (error) {
+      console.error(`❌ [Wishlist] Error cargando imagen para producto ${product.code}:`, error);
+      
+      // Actualizar estado con error
+      const updateFunction = (prevProducts: ProductWithImage[]) => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+        );
+
+      setWishlistProducts(updateFunction);
+      setFilteredProducts(updateFunction);
+    }
   };
 
   // Función para obtener la wishlist
@@ -75,17 +156,31 @@ export default function WishlistScreen() {
       
       console.log('[Wishlist] Filtered products:', products.length);
       
-      setWishlistProducts(products);
+      // 🆕 CONVERTIR A PRODUCTOS CON CACHE DE IMÁGENES
+      const productsWithImageState: ProductWithImage[] = products.map(product => ({
+        ...product,
+        imageUri: null,
+        imageLoading: false,
+        imageError: false
+      }));
+      
+      setWishlistProducts(productsWithImageState);
       
       // Apply current search filter if any
       if (searchText) {
-        const filtered = products.filter(product => 
+        const filtered = productsWithImageState.filter(product => 
           product.product_name.toLowerCase().includes(searchText.toLowerCase()) ||
           product.brands.toLowerCase().includes(searchText.toLowerCase())
         );
         setFilteredProducts(filtered);
       } else {
-        setFilteredProducts(products);
+        setFilteredProducts(productsWithImageState);
+      }
+      
+      // 🆕 CARGAR IMÁGENES DESPUÉS DE CONFIGURAR LOS PRODUCTOS
+      if (productsWithImageState.length > 0) {
+        console.log(`🚀 [Wishlist] Iniciando carga de imágenes para ${productsWithImageState.length} productos`);
+        loadImagesForProducts(productsWithImageState);
       }
       
     } catch (error: any) {
@@ -151,23 +246,62 @@ export default function WishlistScreen() {
     }
   };
 
-  const renderProduct = ({ item }: { item: Product }) => (
+  // 🆕 COMPONENTE DE IMAGEN CON CACHE
+  const ProductImageWithCache: React.FC<{ product: ProductWithImage }> = ({ product }) => {
+    if (product.imageLoading) {
+      return (
+        <View style={[styles.productImageContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color="#007AFF" />
+        </View>
+      );
+    }
+
+    if (product.imageUri && !product.imageError) {
+      return (
+        <View style={styles.productImageContainer}>
+          <Image
+            source={{ uri: product.imageUri }}
+            style={styles.productImage}
+            resizeMode="cover"
+            onError={() => {
+              console.log(`❌ [Wishlist] Error loading cached image for ${product.code}`);
+            }}
+          />
+        </View>
+      );
+    }
+
+    // Fallback al placeholder si no hay imagen o hay error
+    return (
+      <View style={styles.productImageContainer}>
+        <View style={{
+          width: '100%',
+          height: '100%',
+          backgroundColor: '#f0f0f0',
+          borderRadius: 12,
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: '#e0e0e0'
+        }}>
+          <MaterialCommunityIcons 
+            name="image" 
+            size={32} 
+            color="#c0c0c0" 
+          />
+        </View>
+      </View>
+    );
+  };
+
+  const renderProduct = ({ item }: { item: ProductWithImage }) => (
     <TouchableOpacity
       key={item.code}
       style={styles.productItem}
       onPress={() => handleProductPress(item)}
     >
-      <View style={styles.productImageContainer}>
-        {item.image_url ? (
-          <Image
-            source={{ uri: item.image_url }}
-            style={styles.productImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Text style={styles.productEmoji}>{getDefaultEmoji(item)}</Text>
-        )}
-      </View>
+      {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+      <ProductImageWithCache product={item} />
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.product_name}</Text>
         <Text style={styles.productBrand}>{item.brands}</Text>

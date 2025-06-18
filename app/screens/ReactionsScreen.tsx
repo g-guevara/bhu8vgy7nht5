@@ -1,4 +1,4 @@
-// app/screens/ReactionsScreen.tsx
+// app/screens/ReactionsScreen.tsx - CORREGIDO CON CACHE DE IMÁGENES
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -12,10 +12,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { styles } from '../styles/ReactionStyles';
 import { ApiService } from '../services/api';
 import { sampleProducts } from '../data/productData';
 import { useToast } from '../utils/ToastContext';
+// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
+import { imageCacheUtils } from '../utils/imageCacheUtils';
 
 type TabName = 'All' | 'Organic' | 'Product' | 'Ing';
 
@@ -42,12 +45,17 @@ interface Product {
   product_name: string;
   brands: string;
   ingredients_text: string;
-  image_url?: string;
+  image_url?: string; // 🔧 Hacer opcional
 }
 
+// 🆕 INTERFAZ EXTENDIDA PARA PRODUCTOS CON CACHE DE IMÁGENES
 interface ProductWithReaction extends Product {
   reaction: 'Critic' | 'Sensitive' | 'Safe';
   isOrganic: boolean;
+  // Estados de imagen
+  imageUri?: string | null;
+  imageLoading?: boolean;
+  imageError?: boolean;
 }
 
 // For grouping ingredients by first letter
@@ -187,6 +195,7 @@ export default function ReactionsScreen() {
   const [activeTab, setActiveTab] = useState<TabName>('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 🆕 CAMBIAR TIPO DE ESTADO PARA INCLUIR IMAGEN CACHE
   const [productReactions, setProductReactions] = useState<ProductWithReaction[]>([]);
   const [ingredientReactions, setIngredientReactions] = useState<IngredientReaction[]>([]);
   const [groupedIngredients, setGroupedIngredients] = useState<AlphabeticalGroup[]>([]);
@@ -229,6 +238,67 @@ export default function ReactionsScreen() {
     }
   }, [activeTab]);
 
+  // 🆕 FUNCIÓN PARA CARGAR IMÁGENES DESDE CACHE
+  const loadImagesForProducts = async (products: ProductWithReaction[]) => {
+    console.log(`🖼️ [Reactions] Cargando imágenes para ${products.length} productos...`);
+    
+    // Procesar productos con un pequeño delay para evitar sobrecarga
+    for (let i = 0; i < products.length; i++) {
+      setTimeout(() => loadProductImage(products[i]), i * 100);
+    }
+  };
+
+  // 🆕 FUNCIÓN PARA CARGAR IMAGEN DE UN PRODUCTO ESPECÍFICO
+  const loadProductImage = async (product: ProductWithReaction) => {
+    try {
+      // Marcar como cargando
+      setProductReactions(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
+        )
+      );
+
+      console.log(`🔍 [Reactions] Buscando imagen para producto: ${product.code}`);
+      
+      // ⏱️ TIMEOUT DE 30 SEGUNDOS
+      const timeoutPromise = new Promise<string | null>((_, reject) => {
+        setTimeout(() => reject(new Error('Image timeout')), 30000);
+      });
+      
+      const imagePromise = imageCacheUtils.getProductImage(product.code);
+      
+      // Race entre la imagen y el timeout
+      const imageUri = await Promise.race([imagePromise, timeoutPromise]);
+      
+      // Actualizar estado con la imagen obtenida
+      setProductReactions(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { 
+            ...p, 
+            imageUri, 
+            imageLoading: false, 
+            imageError: !imageUri 
+          } : p
+        )
+      );
+
+      if (imageUri) {
+        console.log(`✅ [Reactions] Imagen cargada para producto: ${product.code}`);
+      } else {
+        console.log(`❌ [Reactions] No se encontró imagen para producto: ${product.code}`);
+      }
+    } catch (error) {
+      console.error(`❌ [Reactions] Error cargando imagen para producto ${product.code}:`, error);
+      
+      // Actualizar estado con error
+      setProductReactions(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+        )
+      );
+    }
+  };
+
   const fetchReactions = async () => {
     if (!isMounted.current) return;
     
@@ -255,13 +325,23 @@ export default function ReactionsScreen() {
           productsWithReactions.push({
             ...product,
             reaction: reaction.reaction,
-            isOrganic: product.code.startsWith('SSS')
+            isOrganic: product.code.startsWith('SSS'),
+            // 🆕 AGREGAR ESTADOS DE IMAGEN
+            imageUri: null,
+            imageLoading: false,
+            imageError: false
           });
         }
       }
       
       if (isMounted.current) {
         setProductReactions(productsWithReactions);
+        
+        // 🆕 CARGAR IMÁGENES DESPUÉS DE CONFIGURAR LOS PRODUCTOS
+        if (productsWithReactions.length > 0) {
+          console.log(`🚀 [Reactions] Iniciando carga de imágenes para ${productsWithReactions.length} productos`);
+          loadImagesForProducts(productsWithReactions);
+        }
       }
       
       // Then try to fetch ingredient reactions separately
@@ -433,6 +513,43 @@ export default function ReactionsScreen() {
     }
   };
 
+  // 🆕 COMPONENTE DE IMAGEN CON CACHE
+  const ProductImageWithCache: React.FC<{ product: ProductWithReaction }> = ({ product }) => {
+    if (product.imageLoading) {
+      return (
+        <View style={[styles.foodImagePlaceholder, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color="#007AFF" />
+        </View>
+      );
+    }
+
+    if (product.imageUri && !product.imageError) {
+      return (
+        <View style={styles.foodImagePlaceholder}>
+          <Image
+            source={{ uri: product.imageUri }}
+            style={{ width: '100%', height: '100%', borderRadius: 10 }}
+            resizeMode="cover"
+            onError={() => {
+              console.log(`❌ [Reactions] Error loading cached image for ${product.code}`);
+            }}
+          />
+        </View>
+      );
+    }
+
+    // Fallback al placeholder si no hay imagen o hay error
+    return (
+      <View style={styles.foodImagePlaceholder}>
+        <MaterialCommunityIcons 
+          name="image" 
+          size={28} 
+          color="#c0c0c0" 
+        />
+      </View>
+    );
+  };
+
   // Render ingredient item with better error handling
   const renderIngredientItem = (ingredient: IngredientReaction) => {
     if (!ingredient || !ingredient.ingredientName) {
@@ -559,8 +676,6 @@ export default function ReactionsScreen() {
     // Normal rendering of grouped ingredients
     return (
       <View style={localStyles.dictionaryContainer}>
-
-        
         <ScrollView style={localStyles.ingredientScrollView}>
           {groupedIngredients.map(group => renderLetterGroup(group))}
         </ScrollView>
@@ -617,17 +732,8 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                <View style={styles.foodImagePlaceholder}>
-                  {product.image_url ? (
-                    <Image
-                      source={{ uri: product.image_url }}
-                      style={{ width: '100%', height: '100%', borderRadius: 10 }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.foodEmoji}>{getDefaultEmoji(product)}</Text>
-                  )}
-                </View>
+                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
                   <Text style={styles.foodCategory}>{product.brands}</Text>
@@ -652,17 +758,8 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                <View style={styles.foodImagePlaceholder}>
-                  {product.image_url ? (
-                    <Image
-                      source={{ uri: product.image_url }}
-                      style={{ width: '100%', height: '100%', borderRadius: 10 }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.foodEmoji}>{getDefaultEmoji(product)}</Text>
-                  )}
-                </View>
+                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
                   <Text style={styles.foodCategory}>{product.brands}</Text>
@@ -687,17 +784,8 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                <View style={styles.foodImagePlaceholder}>
-                  {product.image_url ? (
-                    <Image
-                      source={{ uri: product.image_url }}
-                      style={{ width: '100%', height: '100%', borderRadius: 10 }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.foodEmoji}>{getDefaultEmoji(product)}</Text>
-                  )}
-                </View>
+                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
                   <Text style={styles.foodCategory}>{product.brands}</Text>
