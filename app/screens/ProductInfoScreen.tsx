@@ -1,5 +1,5 @@
 // app/screens/ProductInfoScreen.tsx
-// Version: 4.2.0 - Con sistema de cache de imágenes integrado
+// Version: 4.3.0 - FIXED: Actualización automática de ingredientes coloreados
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -51,11 +51,14 @@ export default function ProductInfoScreen() {
   const [existingNote, setExistingNote] = useState<any>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   
-  // 🆕 Estados para el sistema de cache de imágenes
+  // 🔥 NUEVO: Estado para forzar recarga de ingredientes
+  const [ingredientsKey, setIngredientsKey] = useState(0);
+  
+  // Estados para el sistema de cache de imágenes
   const [productImageUri, setProductImageUri] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   
-  // 🆕 Estado para información del sistema de datos
+  // Estado para información del sistema de datos
   const [dataSource, setDataSource] = useState<'integrated' | 'asyncstorage' | 'none'>('none');
   const [dataStats, setDataStats] = useState<{
     totalProducts: number;
@@ -68,7 +71,19 @@ export default function ProductInfoScreen() {
   const lastSavedNotesRef = useRef<string>('');
   const notesBeforeEditRef = useRef<string>('');
   
-  // 🆕 Función para cargar imagen desde cache
+  // 🔥 NUEVO: Función para forzar recarga de ingredientes
+  const forceIngredientsReload = () => {
+    console.log('🔄 Forcing ingredients reload...');
+    setIngredientsKey(prev => prev + 1);
+  };
+  
+  // 🔥 NUEVO: Función que se llama cuando se guarda una reacción
+  const handleReactionSaved = () => {
+    console.log('✅ Reaction saved, reloading ingredients...');
+    forceIngredientsReload();
+  };
+  
+  // Función para cargar imagen desde cache
   const loadProductImage = async (productCode: string) => {
     setImageLoading(true);
     try {
@@ -162,13 +177,13 @@ export default function ProductInfoScreen() {
         if (integratedProduct) {
           console.log(`💾 Product found in integrated data system`);
           
-          // 🔧 VALIDAR PRODUCTO INTEGRADO
+          // Validar producto integrado
           const validatedProduct = validateAndNormalizeProduct(integratedProduct);
           if (validatedProduct) {
             setProduct(validatedProduct);
             setDataSource('integrated');
             
-            // 🆕 CARGAR IMAGEN DESDE CACHE
+            // Cargar imagen desde cache
             await loadProductImage(validatedProduct.code);
             
             loadDataStats();
@@ -183,7 +198,7 @@ export default function ProductInfoScreen() {
         // PASO 3: Si no está en datos integrados, usar AsyncStorage como fallback
         console.log(`🗄️ Product not in integrated data, using AsyncStorage fallback`);
         
-        // 🔧 VALIDAR PRODUCTO DE ASYNCSTORAGE
+        // Validar producto de AsyncStorage
         const validatedProduct = validateAndNormalizeProduct(tempProduct);
         if (!validatedProduct) {
           throw new Error('Invalid product data from AsyncStorage');
@@ -192,7 +207,7 @@ export default function ProductInfoScreen() {
         setProduct(validatedProduct);
         setDataSource('asyncstorage');
         
-        // 🆕 CARGAR IMAGEN DESDE CACHE
+        // Cargar imagen desde cache
         await loadProductImage(validatedProduct.code);
         
         // PASO 4: Agregar al sistema integrado para próximas veces
@@ -241,7 +256,7 @@ export default function ProductInfoScreen() {
     };
   }, []);
 
-  // 🆕 Cargar estadísticas del sistema de datos
+  // Cargar estadísticas del sistema de datos
   const loadDataStats = async () => {
     try {
       const stats = await getProductDataStats();
@@ -398,7 +413,7 @@ export default function ProductInfoScreen() {
     });
   };
 
-  // 🆕 Función para mostrar estadísticas del sistema (solo en desarrollo)
+  // Función para mostrar estadísticas del sistema (solo en desarrollo)
   const showDataStats = async () => {
     if (!__DEV__) return;
     
@@ -428,7 +443,7 @@ export default function ProductInfoScreen() {
             <Text style={styles.backText}>Home</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
-          {/* 🆕 Botón de estadísticas en desarrollo */}
+          {/* Botón de estadísticas en desarrollo */}
           {__DEV__ && (
             <TouchableOpacity 
               onPress={showDataStats}
@@ -478,14 +493,11 @@ export default function ProductInfoScreen() {
           <Text style={styles.backText}>Home</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Information</Text>
-        
-        {/* 🆕 Indicador de fuente de datos y botón de estadísticas en desarrollo */}
-
       </View>
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.productInfoContainer}>
-          {/* Component 1: Product Header (Image and Name) - 🆕 CON IMAGEN DESDE CACHE */}
+          {/* Component 1: Product Header (Image and Name) */}
           <ProductHeader 
             product={product} 
             imageUri={productImageUri}
@@ -494,8 +506,11 @@ export default function ProductInfoScreen() {
           
           <View style={styles.divider} />
           
-          {/* Component 2: Product Details (Brand and Ingredients) */}
-          <ProductDetails product={product} />
+          {/* Component 2: Product Details (Brand and Ingredients) - 🔥 CON KEY PARA FORZAR RECARGA */}
+          <ProductDetails 
+            key={ingredientsKey} 
+            product={product} 
+          />
           
           <View style={styles.divider} />
           
@@ -504,11 +519,12 @@ export default function ProductInfoScreen() {
           
           <View style={styles.divider} />
           
-          {/* Component 3: Product Reactions */}
+          {/* Component 3: Product Reactions - 🔥 CON CALLBACK PARA RECARGAR INGREDIENTES */}
           <ProductReactions 
             selectedReaction={selectedReaction} 
             setSelectedReaction={setSelectedReaction} 
-            product={product} 
+            product={product}
+            onReactionSaved={handleReactionSaved}
           />
           
           <View style={styles.divider} />
@@ -522,9 +538,6 @@ export default function ProductInfoScreen() {
             autoSaveStatus={autoSaveStatus}
             characterLimit={NOTES_CHARACTER_LIMIT}
           />
-          
-          {/* 🆕 Información del sistema de datos (solo en desarrollo) */}
-
         </View>
       </ScrollView>
     </SafeAreaView>

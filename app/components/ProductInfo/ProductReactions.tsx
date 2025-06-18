@@ -1,4 +1,6 @@
 // app/components/ProductInfo/ProductReactions.tsx
+// FIXED: Agregado callback para recargar ingredientes después de guardar reacción
+
 import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { styles } from '../../styles/ProductInfoStyles';
@@ -9,13 +11,15 @@ import { Product } from '../../data/productData';
 interface ProductReactionsProps {
   selectedReaction: 'Critic' | 'Sensitive' | 'Safe' | null;
   setSelectedReaction: (reaction: 'Critic' | 'Sensitive' | 'Safe' | null) => void;
-  product: Product; // Add product prop to access ingredients
+  product: Product;
+  onReactionSaved?: () => void; // 🔥 NUEVO: Callback para notificar cuando se guarda
 }
 
 const ProductReactions: React.FC<ProductReactionsProps> = ({
   selectedReaction,
   setSelectedReaction,
-  product
+  product,
+  onReactionSaved // 🔥 NUEVO
 }) => {
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
@@ -70,8 +74,11 @@ const ProductReactions: React.FC<ProductReactionsProps> = ({
     setIsLoading(true);
     
     try {
+      console.log('💾 Saving reaction:', reaction);
+      
       // 1. Save product reaction
       const response = await ApiService.saveProductReaction(product.code, reaction);
+      console.log('✅ Product reaction saved');
       
       // 2. Parse and save ingredient reactions
       if (product.ingredients_text) {
@@ -81,14 +88,25 @@ const ProductReactions: React.FC<ProductReactionsProps> = ({
           .map(i => i.trim())
           .filter(i => i.length > 0);
           
+        console.log(`💾 Saving ${ingredients.length} ingredient reactions...`);
+        
         // Save each ingredient with the same reaction
         for (const ingredient of ingredients) {
           await ApiService.saveIngredientReaction(ingredient, reaction);
         }
+        
+        console.log('✅ All ingredient reactions saved');
       }
       
       setSavedReaction(reaction);
       showToast('Reaction saved successfully', 'success');
+      
+      // 🔥 NUEVO: Notificar al componente padre que se guardó la reacción
+      if (onReactionSaved) {
+        console.log('🔄 Calling onReactionSaved callback...');
+        onReactionSaved();
+      }
+      
     } catch (error: any) {
       console.error('Error saving reaction:', error);
       showToast(error.message || 'Failed to save reaction', 'error');
@@ -115,6 +133,8 @@ const ProductReactions: React.FC<ProductReactionsProps> = ({
     setIsLoading(true);
     try {
       if (savedReaction && product.code) {
+        console.log('🗑️ Clearing reaction...');
+        
         // Delete the reaction if it exists
         await ApiService.deleteProductReaction(product.code);
         
@@ -129,11 +149,20 @@ const ProductReactions: React.FC<ProductReactionsProps> = ({
             await ApiService.deleteIngredientReaction(ingredient);
           }
         }
+        
+        console.log('✅ Reaction cleared');
       }
       
       setSelectedReaction(null);
       setSavedReaction(null);
       showToast('Reaction cleared', 'success');
+      
+      // 🔥 NUEVO: Notificar al componente padre que se limpió la reacción
+      if (onReactionSaved) {
+        console.log('🔄 Calling onReactionSaved callback after clear...');
+        onReactionSaved();
+      }
+      
     } catch (error: any) {
       console.error('Error clearing reaction:', error);
       showToast(error.message || 'Failed to clear reaction', 'error');
@@ -161,7 +190,6 @@ const ProductReactions: React.FC<ProductReactionsProps> = ({
         // Show loading state and hide reaction chips
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#007AFF" />
-
         </View>
       ) : (
         // Show reaction chips when not loading
