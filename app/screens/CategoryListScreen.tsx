@@ -1,4 +1,4 @@
-// app/screens/CategoryListScreen.tsx
+// app/screens/CategoryListScreen.tsx - FINAL FIX: Handle mixed API and local products
 import React, { useEffect, useState } from 'react';
 import { 
   SafeAreaView, 
@@ -21,7 +21,7 @@ interface Product {
   product_name: string;
   brands: string;
   ingredients_text: string;
-  image_url: string;
+  image_url?: string;
 }
 
 export default function CategoryListScreen() {
@@ -34,15 +34,58 @@ export default function CategoryListScreen() {
     const loadProducts = () => {
       setLoading(true);
       try {
-        // Filter products that start with "SSS" and match the brand
-        const filteredProducts = sampleProducts.filter(product => 
-          product.code.startsWith('SSS') && 
-          product.brands.toLowerCase() === (brand?.toString().toLowerCase() || '')
-        );
+        console.log('🔍 Starting product filtering...');
+        console.log('📊 Total sampleProducts available:', sampleProducts.length);
+        console.log('🎯 Looking for brand:', brand);
+        
+        // 🔧 ROBUST FILTERING: Handle both local and API products
+        const filteredProducts = sampleProducts.filter(product => {
+          // ✅ STEP 1: Basic validation
+          if (!product) {
+            console.warn('⚠️ Found null/undefined product');
+            return false;
+          }
+          
+          // ✅ STEP 2: Ensure code exists and convert to string if needed
+          let productCode: string;
+          if (product.code === null || product.code === undefined) {
+            console.warn('⚠️ Product missing code:', product);
+            return false;
+          }
+          
+          // Convert number codes to strings for consistency
+          productCode = String(product.code);
+          
+          // ✅ STEP 3: Only include organic products (SSS prefix)
+          const isOrganic = productCode.startsWith('SSS');
+          if (!isOrganic) {
+            // This is an API product, skip it for category view
+            return false;
+          }
+          
+          // ✅ STEP 4: Validate brands
+          if (!product.brands || typeof product.brands !== 'string') {
+            console.warn('⚠️ Product missing brands:', product);
+            return false;
+          }
+          
+          // ✅ STEP 5: Check if brands match (case insensitive)
+          const brandsMatch = product.brands.toLowerCase() === (brand?.toString().toLowerCase() || '');
+          
+          console.log(`📝 Product ${productCode}: isOrganic=${isOrganic}, brands="${product.brands}", match=${brandsMatch}`);
+          
+          return brandsMatch;
+        });
+        
+        console.log('✅ Filtered products result:', filteredProducts.length);
+        filteredProducts.forEach(p => {
+          console.log(`✅ Including: ${p.code} - ${p.product_name} (${p.brands})`);
+        });
         
         setProducts(filteredProducts);
       } catch (error) {
-        console.error('Error filtering products:', error);
+        console.error('❌ Error filtering products:', error);
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -53,21 +96,29 @@ export default function CategoryListScreen() {
 
   const handleProductPress = async (product: Product) => {
     try {
+      // Validate product before storing
+      if (!product || !product.code) {
+        console.error('❌ Invalid product for navigation:', product);
+        return;
+      }
+      
       // Store the selected product in AsyncStorage
       await AsyncStorage.setItem('selectedProduct', JSON.stringify(product));
       
       // Navigate to product detail screen
       router.push('/screens/ProductInfoScreen');
     } catch (error) {
-      console.error('Error storing product in AsyncStorage:', error);
+      console.error('❌ Error storing product in AsyncStorage:', error);
     }
   };
 
   const getDefaultEmoji = (product: Product): string => {
-    const name = product.product_name.toLowerCase();
-    const ingredients = product.ingredients_text.toLowerCase();
+    if (!product) return '🍽️';
+    
+    const name = (product.product_name || '').toLowerCase();
+    const ingredients = (product.ingredients_text || '').toLowerCase();
 
-    if (name.includes('Null') || ingredients.includes('hafer')) return '';
+    if (name.includes('null') || ingredients.includes('hafer')) return '';
 
     return '🍽️';
   };
@@ -75,6 +126,38 @@ export default function CategoryListScreen() {
   const handleBack = () => {
     router.back();
   };
+
+  // 🔧 DEBUG: Show cache info in development
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('🐛 CATEGORY SCREEN DEBUG:');
+      console.log('- Category:', category);
+      console.log('- Brand:', brand);
+      console.log('- Total sampleProducts:', sampleProducts.length);
+      
+      // Count different types of products
+      const sssProducts = sampleProducts.filter(p => p && String(p.code).startsWith('SSS'));
+      const apiProducts = sampleProducts.filter(p => p && !String(p.code).startsWith('SSS'));
+      
+      console.log('- SSS Products (Local):', sssProducts.length);
+      console.log('- API Products (External):', apiProducts.length);
+      
+      // Show some examples of each type
+      if (sssProducts.length > 0) {
+        console.log('📝 Sample SSS Products:');
+        sssProducts.slice(0, 3).forEach(p => {
+          console.log(`  - ${p.code}: ${p.product_name} (${p.brands})`);
+        });
+      }
+      
+      if (apiProducts.length > 0) {
+        console.log('📝 Sample API Products (will be filtered out):');
+        apiProducts.slice(0, 3).forEach(p => {
+          console.log(`  - ${p.code}: ${p.product_name} (${p.brands})`);
+        });
+      }
+    }
+  }, [category, brand]);
 
   if (loading) {
     return (
@@ -106,7 +189,7 @@ export default function CategoryListScreen() {
       {products.length > 0 ? (
         <FlatList
           data={products}
-          keyExtractor={(item) => item.code}
+          keyExtractor={(item) => String(item.code)}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.productItem}
@@ -124,8 +207,8 @@ export default function CategoryListScreen() {
                 )}
               </View>
               <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.product_name}</Text>
-                <Text style={styles.productBrand}>{item.brands}</Text>
+                <Text style={styles.productName}>{item.product_name || 'Unknown Product'}</Text>
+                <Text style={styles.productBrand}>{item.brands || 'Unknown Brand'}</Text>
               </View>
               <Text style={styles.arrowIcon}>›</Text>
             </TouchableOpacity>
@@ -135,6 +218,9 @@ export default function CategoryListScreen() {
       ) : (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No organic {category?.toString()} products found</Text>
+          <Text style={styles.emptySubtext}>
+            Products for this category will appear here once added.
+          </Text>
         </View>
       )}
     </SafeAreaView>

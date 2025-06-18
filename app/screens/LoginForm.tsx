@@ -322,32 +322,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
       </TouchableOpacity>
 
       {/* Google Sign-In Button */}
-      <TouchableOpacity 
-        style={[
-          styles.googleButton, 
-          (googleLoading || !request || loginBlockStatus.isBlocked) && styles.googleButtonDisabled
-        ]} 
-        onPress={() => promptAsync()}
-        disabled={!request || googleLoading || loginBlockStatus.isBlocked}
-      >
-        {googleLoading ? (
-          <ActivityIndicator color="#555" />
-        ) : (
-          <>
-            <Image 
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png' }}
-              style={styles.googleLogo}
-              resizeMode="contain"
-            />
-            <Text style={[
-              styles.googleButtonText,
-              loginBlockStatus.isBlocked && styles.googleButtonTextDisabled
-            ]}>
-              Continuar con Google
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
+
 
       <TouchableOpacity 
         style={styles.forgotPasswordButton} 

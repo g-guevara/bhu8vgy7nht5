@@ -1,4 +1,4 @@
-// app/styles/CategoryListStyles.ts
+// app/styles/CategoryListStyles.ts - FIXED: Added missing emptySubtext style
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
@@ -91,5 +91,14 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  // ✅ FIXED: Added missing emptySubtext style
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
