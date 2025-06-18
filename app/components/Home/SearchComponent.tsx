@@ -381,7 +381,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       <View style={searchStyles.searchContainer}>
         <TextInput
           style={searchStyles.searchInput}
-          placeholder="Search products..."
+          placeholder="Search"
           value={searchText}
           onChangeText={setSearchText}
           onFocus={() => onFocusChange(true)}
@@ -442,7 +442,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           <View style={searchStyles.noResultsContainer}>
             <ActivityIndicator size="large" color="#000000" />
             <Text style={searchStyles.noResultsSubtext}>
-              Searching locally and remotely...
+              Searching ...
             </Text>
           </View>
         ) : searchText && searchResults.length > 0 ? (
