@@ -424,25 +424,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         ) : null}
       </View>
 
-      {/* 🆕 INFORMACIÓN DEL CACHE INTEGRADO (solo en desarrollo) */}
-      {__DEV__ && cacheStats && (
-        <View style={{
-          paddingHorizontal: 20,
-          paddingVertical: 8,
-          backgroundColor: '#f8f9fa',
-          borderBottomWidth: 1,
-          borderBottomColor: '#e0e0e0'
-        }}>
-          <Text style={{ fontSize: 12, color: '#666', fontWeight: '500' }}>
-            💾 Integrated Data: {cacheStats.totalProducts} total ({cacheStats.cachedProducts} cached, {cacheStats.cacheSizeKB}KB)
-          </Text>
-          {searchText && (
-            <Text style={{ fontSize: 12, color: '#666' }}>
-              🎯 Collection: {getCollectionInfo(searchText)}
-            </Text>
-          )}
-        </View>
-      )}
+
 
       <View style={searchStyles.resultsContainer}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

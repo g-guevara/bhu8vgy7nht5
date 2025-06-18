@@ -167,7 +167,6 @@ export default function ProductInfoScreen() {
           if (validatedProduct) {
             setProduct(validatedProduct);
             setDataSource('integrated');
-            showToast('Loaded from integrated data', 'success');
             
             // 🆕 CARGAR IMAGEN DESDE CACHE
             await loadProductImage(validatedProduct.code);
@@ -481,21 +480,7 @@ export default function ProductInfoScreen() {
         <Text style={styles.headerTitle}>Information</Text>
         
         {/* 🆕 Indicador de fuente de datos y botón de estadísticas en desarrollo */}
-        {__DEV__ && (
-          <View style={{ position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ 
-              fontSize: 12, 
-              color: dataSource === 'integrated' ? '#34C759' : '#666',
-              marginRight: 8,
-              fontWeight: '600'
-            }}>
-              {dataSource === 'integrated' ? '💾' : '🗄️'}
-            </Text>
-            <TouchableOpacity onPress={showDataStats} style={{ padding: 8 }}>
-              <Text style={{ fontSize: 16 }}>📊</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -539,32 +524,7 @@ export default function ProductInfoScreen() {
           />
           
           {/* 🆕 Información del sistema de datos (solo en desarrollo) */}
-          {__DEV__ && dataStats && (
-            <View style={{
-              marginTop: 20,
-              padding: 12,
-              backgroundColor: '#f8f9fa',
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: '#e9ecef'
-            }}>
-              <Text style={{ fontSize: 12, color: '#666', fontWeight: '600' }}>
-                🔧 Development Info
-              </Text>
-              <Text style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
-                Source: {dataSource === 'integrated' ? 'Integrated Data System 💾' : 'AsyncStorage Fallback 🗄️'}
-              </Text>
-              <Text style={{ fontSize: 11, color: '#666' }}>
-                Total Products: {dataStats.totalProducts} ({dataStats.cachedProducts} cached, {dataStats.cacheSizeKB}KB)
-              </Text>
-              <Text style={{ fontSize: 11, color: '#666' }}>
-                Product Code: {product.code}
-              </Text>
-              <Text style={{ fontSize: 11, color: '#666' }}>
-                Image Status: {productImageUri ? '✅ Loaded' : imageLoading ? '⏳ Loading' : '❌ No Image'}
-              </Text>
-            </View>
-          )}
+
         </View>
       </ScrollView>
     </SafeAreaView>
