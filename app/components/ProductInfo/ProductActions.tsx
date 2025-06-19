@@ -1,8 +1,10 @@
 // app/components/ProductInfo/ProductActions.tsx
+// FIXED: Automatically add products to integrated cache when starting tests
+
 import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Text, ActivityIndicator, Alert } from 'react-native';
 import { styles } from '../../styles/ProductInfoStyles';
-import { Product } from '../../data/productData';
+import { Product, addProductToData } from '../../data/productData';
 import { ApiService } from '../../services/api';
 import { useToast } from '../../utils/ToastContext';
 
@@ -64,6 +66,16 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
 
     setLoading(true);
     try {
+      // 🆕 AGREGAR AL SISTEMA INTEGRADO ANTES DE AGREGAR A WISHLIST
+      console.log('💾 Adding product to integrated cache before wishlist...');
+      addProductToData({
+        code: product.code,
+        product_name: product.product_name,
+        brands: product.brands,
+        ingredients_text: product.ingredients_text,
+        image_url: product.image_url
+      });
+
       await ApiService.addToWishlist(product.code);
       setIsInWishlist(true);
       showToast('Product added to wishlist', 'success');
@@ -123,6 +135,17 @@ const ProductActions: React.FC<ProductActionsProps> = ({ product }) => {
         );
         return;
       }
+      
+      // 🆕 CRÍTICO: AGREGAR PRODUCTO AL SISTEMA INTEGRADO ANTES DE CREAR EL TEST
+      console.log('💾 Adding product to integrated cache before starting test...');
+      addProductToData({
+        code: product.code,
+        product_name: product.product_name,
+        brands: product.brands,
+        ingredients_text: product.ingredients_text,
+        image_url: product.image_url
+      });
+      console.log('✅ Product added to integrated cache successfully');
       
       const test = await ApiService.startTest(product.code);
       setActiveTest(test);

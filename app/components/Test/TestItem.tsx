@@ -1,4 +1,6 @@
 // app/components/Test/TestItem.tsx
+// FIXED: Updated to use integrated cache system from productData.ts
+
 import React from 'react';
 import { 
   View, 
@@ -7,7 +9,12 @@ import {
   ActivityIndicator 
 } from 'react-native';
 import { styles } from '../../styles/TestStyles';
-import { sampleProducts } from '../../data/productData';
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE DATOS INTEGRADO
+import { 
+  findProductInData, 
+  addProductToData,
+  Product 
+} from '../../data/productData';
 
 interface TestItemProps {
   activeTests: any[];
@@ -34,16 +41,30 @@ const TestItem: React.FC<TestItemProps> = ({
     return `${diffDays} days, ${diffHours} hours`;
   };
 
+  // 🆕 FUNCIÓN ACTUALIZADA PARA USAR EL SISTEMA INTEGRADO
   const getProductName = (productId: string) => {
-    // Look up the product name from the sampleProducts array
-    const product = sampleProducts.find(p => p.code === productId);
-    
+    // Buscar primero en el sistema integrado
+    const product = findProductInData(productId);
     if (product) {
+      console.log(`💾 [TestItem] Product ${productId} found in integrated data`);
       return product.product_name;
     }
     
-    // Fallback if product not found
-    return `Product ${productId.substring(0, 8)}...`;
+    console.log(`❌ [TestItem] Product ${productId} not found in integrated data`);
+    
+    // 🔧 FALLBACK: Si no se encuentra, crear un producto básico y agregarlo al cache
+    const fallbackProduct: Product = {
+      code: productId,
+      product_name: `Product ${productId.substring(0, 8)}`,
+      brands: 'Unknown Brand',
+      ingredients_text: 'Ingredients not available'
+    };
+    
+    // Agregar al sistema integrado para próximas veces
+    addProductToData(fallbackProduct);
+    console.log(`💾 [TestItem] Added fallback product ${productId} to integrated data`);
+    
+    return fallbackProduct.product_name;
   };
 
   if (loading) {

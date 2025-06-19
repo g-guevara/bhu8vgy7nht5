@@ -1,4 +1,6 @@
 // app/screens/FullCalendarScreen.tsx
+// FIXED: Updated to use integrated cache system from productData.ts
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,7 +15,12 @@ import { styles } from '../styles/FullCalendarStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
 import FullCalendar from '../components/Test/FullCalendar';
-import { sampleProducts, Product } from '../data/productData';
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE DATOS INTEGRADO
+import { 
+  findProductInData, 
+  addProductToData,
+  Product 
+} from '../data/productData';
 
 // Define interfaces
 export interface TestItem {
@@ -49,10 +56,47 @@ export default function FullCalendarScreen(): JSX.Element {
     fetchTests();
   }, []);
 
+  // 🆕 FUNCIÓN PARA SINCRONIZAR PRODUCTOS DE TESTS CON EL CACHE
+  const syncTestProductsWithCache = async (tests: TestItem[]): Promise<void> => {
+    console.log('🔄 [FullCalendar] Syncing test products with integrated cache...');
+    
+    const allTestProductIds = tests.map(test => test.itemID);
+    const uniqueProductIds = [...new Set(allTestProductIds)];
+    
+    console.log(`📦 [FullCalendar] Found ${uniqueProductIds.length} unique product IDs in tests`);
+    
+    for (const productId of uniqueProductIds) {
+      // Verificar si ya existe en el cache
+      const existingProduct = findProductInData(productId);
+      if (existingProduct) {
+        console.log(`✅ [FullCalendar] Product ${productId} already in cache`);
+        continue;
+      }
+      
+      console.log(`🔍 [FullCalendar] Product ${productId} not in cache, creating fallback...`);
+      
+      // Crear producto fallback y agregarlo al cache
+      const fallbackProduct: Product = {
+        code: productId,
+        product_name: `Product ${productId.substring(0, 8)}`,
+        brands: 'Unknown Brand',
+        ingredients_text: 'Ingredients not available'
+      };
+      
+      addProductToData(fallbackProduct);
+      console.log(`💾 [FullCalendar] Added fallback product ${productId} to cache`);
+    }
+    
+    console.log('✅ [FullCalendar] Test products sync completed');
+  };
+
   const fetchTests = async (): Promise<void> => {
     setLoading(true);
     try {
       const tests = await ApiService.getTests();
+      
+      // 🆕 SINCRONIZAR PRODUCTOS CON EL CACHE ANTES DE PROCESAR
+      await syncTestProductsWithCache(tests);
       
       // Separate active and completed tests
       const active = tests.filter((test: TestItem) => !test.completed);
@@ -89,9 +133,30 @@ export default function FullCalendarScreen(): JSX.Element {
     });
   };
 
+  // 🆕 FUNCIÓN ACTUALIZADA PARA USAR EL SISTEMA INTEGRADO
   const getProductName = (productId: string): string => {
-    const product = sampleProducts.find((p: Product) => p.code === productId);
-    return product?.product_name || `Product ${productId.substring(0, 8)}...`;
+    // Buscar primero en el sistema integrado
+    const product = findProductInData(productId);
+    if (product) {
+      console.log(`💾 [FullCalendar] Product ${productId} found in integrated data`);
+      return product.product_name;
+    }
+    
+    console.log(`❌ [FullCalendar] Product ${productId} not found in integrated data`);
+    
+    // 🔧 FALLBACK: Si no se encuentra, crear un producto básico y agregarlo al cache
+    const fallbackProduct: Product = {
+      code: productId,
+      product_name: `Product ${productId.substring(0, 8)}`,
+      brands: 'Unknown Brand',
+      ingredients_text: 'Ingredients not available'
+    };
+    
+    // Agregar al sistema integrado para próximas veces
+    addProductToData(fallbackProduct);
+    console.log(`💾 [FullCalendar] Added fallback product ${productId} to integrated data`);
+    
+    return fallbackProduct.product_name;
   };
 
   const formatDateForHistory = (dateString: string): string => {
@@ -132,7 +197,7 @@ export default function FullCalendarScreen(): JSX.Element {
     .sort((a, b) => new Date(b.finishDate).getTime() - new Date(a.finishDate).getTime())
     .map(test => ({
       date: formatDateForHistory(test.finishDate),
-      name: getProductName(test.itemID),
+      name: getProductName(test.itemID), // 🆕 Usar función actualizada
       status: test.result as 'Critic' | 'Sensitive' | 'Safe' || 'Safe',
       timeAgo: getTimeAgo(test.updatedAt || test.finishDate)
     }));

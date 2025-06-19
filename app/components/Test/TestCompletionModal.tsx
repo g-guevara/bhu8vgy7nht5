@@ -1,4 +1,6 @@
 // app/components/Test/TestCompletionModal.tsx
+// FIXED: Updated to use integrated cache system from productData.ts
+
 import React, { useState } from 'react';
 import { 
   Modal, 
@@ -11,7 +13,12 @@ import {
 } from 'react-native';
 import { ApiService } from '../../services/api';
 import { useToast } from '../../utils/ToastContext';
-import { sampleProducts, Product } from '../../data/productData';
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE DATOS INTEGRADO
+import { 
+  findProductInData, 
+  addProductToData,
+  Product 
+} from '../../data/productData';
 
 interface TestCompletionModalProps {
   visible: boolean;
@@ -32,13 +39,44 @@ const TestCompletionModal: React.FC<TestCompletionModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const { showToast } = useToast();
 
+  // 🆕 FUNCIÓN ACTUALIZADA PARA USAR EL SISTEMA INTEGRADO
   const getProductName = (productId: string): string => {
-    const product = sampleProducts.find(p => p.code === productId);
-    return product?.product_name || `Product ${productId.substring(0, 8)}...`;
+    // Buscar primero en el sistema integrado
+    const product = findProductInData(productId);
+    if (product) {
+      console.log(`💾 [TestModal] Product ${productId} found in integrated data`);
+      return product.product_name;
+    }
+    
+    console.log(`❌ [TestModal] Product ${productId} not found in integrated data`);
+    return `Product ${productId.substring(0, 8)}...`;
   };
 
+  // 🆕 FUNCIÓN ACTUALIZADA PARA USAR EL SISTEMA INTEGRADO
   const getProduct = (productId: string): Product | null => {
-    return sampleProducts.find(p => p.code === productId) || null;
+    // Buscar primero en el sistema integrado
+    const product = findProductInData(productId);
+    if (product) {
+      console.log(`💾 [TestModal] Product ${productId} found in integrated data`);
+      return product;
+    }
+    
+    console.log(`❌ [TestModal] Product ${productId} not found in integrated data`);
+    
+    // 🔧 FALLBACK: Si no se encuentra, intentar crear un producto básico
+    // Esto puede pasar si el test se creó antes de que el producto fuera agregado al cache
+    const fallbackProduct: Product = {
+      code: productId,
+      product_name: `Product ${productId.substring(0, 8)}`,
+      brands: 'Unknown Brand',
+      ingredients_text: 'Ingredients not available'
+    };
+    
+    // Agregar al sistema integrado para próximas veces
+    addProductToData(fallbackProduct);
+    console.log(`💾 [TestModal] Added fallback product ${productId} to integrated data`);
+    
+    return fallbackProduct;
   };
 
   // Helper function to get the appropriate selected style for each reaction type
@@ -92,14 +130,18 @@ const TestCompletionModal: React.FC<TestCompletionModalProps> = ({
     setIsLoading(true);
 
     try {
+      // 🆕 USAR LA FUNCIÓN ACTUALIZADA
       const product = getProduct(productId);
       
       if (!product) {
         throw new Error('Product information not found');
       }
 
+      console.log(`✅ [TestModal] Completing test for product: ${product.product_name}`);
+
       // 1. Save product reaction (same as ProductReactions.tsx)
       await ApiService.saveProductReaction(productId, selectedReaction);
+      console.log(`✅ [TestModal] Product reaction saved`);
       
       // 2. Parse and save ingredient reactions (same as ProductReactions.tsx)
       if (product.ingredients_text) {
@@ -108,21 +150,26 @@ const TestCompletionModal: React.FC<TestCompletionModalProps> = ({
           .map(i => i.trim())
           .filter(i => i.length > 0);
           
+        console.log(`📝 [TestModal] Saving reactions for ${ingredients.length} ingredients`);
+        
         // Save each ingredient with the same reaction
         for (const ingredient of ingredients) {
           await ApiService.saveIngredientReaction(ingredient, selectedReaction);
         }
+        
+        console.log(`✅ [TestModal] All ingredient reactions saved`);
       }
 
       // 3. Complete the test with the selected reaction
       await ApiService.completeTest(testId, selectedReaction);
+      console.log(`✅ [TestModal] Test completed successfully`);
 
       showToast('Test completed successfully', 'success');
       onComplete();
       onClose();
       
     } catch (error: any) {
-      console.error('Error completing test:', error);
+      console.error('❌ [TestModal] Error completing test:', error);
       showToast(error.message || 'Failed to complete test', 'error');
     } finally {
       setIsLoading(false);

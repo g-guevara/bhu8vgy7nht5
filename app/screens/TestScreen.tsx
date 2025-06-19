@@ -1,4 +1,6 @@
 // app/screens/TestScreen.tsx
+// FIXED: Updated to use integrated cache system from productData.ts
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,10 +17,14 @@ import { useToast } from '../utils/ToastContext';
 import { useRouter } from 'expo-router';
 import TestCalendar from '../components/Test/TestCalendar';
 import TestItem from '../components/Test/TestItem';
-
 import TestCompletionModal from '../components/Test/TestCompletionModal';
 
-import { sampleProducts, Product } from '../data/productData';
+// 🆕 IMPORTAR EL NUEVO SISTEMA DE DATOS INTEGRADO
+import { 
+  findProductInData, 
+  addProductToData,
+  Product 
+} from '../data/productData';
 
 // Define interfaces with specific types
 export interface TestItem {
@@ -74,10 +80,47 @@ export default function TestScreen(): JSX.Element {
     }
   }, [selectedDate, activeTests]);
 
+  // 🆕 FUNCIÓN PARA SINCRONIZAR PRODUCTOS DE TESTS CON EL CACHE
+  const syncTestProductsWithCache = async (tests: TestItem[]): Promise<void> => {
+    console.log('🔄 Syncing test products with integrated cache...');
+    
+    const allTestProductIds = tests.map(test => test.itemID);
+    const uniqueProductIds = [...new Set(allTestProductIds)];
+    
+    console.log(`📦 Found ${uniqueProductIds.length} unique product IDs in tests`);
+    
+    for (const productId of uniqueProductIds) {
+      // Verificar si ya existe en el cache
+      const existingProduct = findProductInData(productId);
+      if (existingProduct) {
+        console.log(`✅ Product ${productId} already in cache`);
+        continue;
+      }
+      
+      console.log(`🔍 Product ${productId} not in cache, creating fallback...`);
+      
+      // Crear producto fallback y agregarlo al cache
+      const fallbackProduct: Product = {
+        code: productId,
+        product_name: `Product ${productId.substring(0, 8)}`,
+        brands: 'Unknown Brand',
+        ingredients_text: 'Ingredients not available'
+      };
+      
+      addProductToData(fallbackProduct);
+      console.log(`💾 Added fallback product ${productId} to cache`);
+    }
+    
+    console.log('✅ Test products sync completed');
+  };
+
   const fetchTests = async (): Promise<void> => {
     setLoading(true);
     try {
       const tests = await ApiService.getTests();
+      
+      // 🆕 SINCRONIZAR PRODUCTOS CON EL CACHE ANTES DE PROCESAR
+      await syncTestProductsWithCache(tests);
       
       // Separate active and completed tests
       const active = tests.filter((test: TestItem) => !test.completed);
@@ -149,22 +192,36 @@ export default function TestScreen(): JSX.Element {
     return `${date.getDate()} ${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
   };
 
+  // 🆕 FUNCIÓN ACTUALIZADA PARA USAR EL SISTEMA INTEGRADO
   const getProductName = (productId: string): string => {
-    // Look up the product name from the sampleProducts array
-    const product = sampleProducts.find((p: Product) => p.code === productId);
-    
+    // Buscar primero en el sistema integrado
+    const product = findProductInData(productId);
     if (product) {
+      console.log(`💾 [TestScreen] Product ${productId} found in integrated data`);
       return product.product_name;
     }
     
-    // Fallback if product not found
-    return `Product ${productId.substring(0, 8)}...`;
+    console.log(`❌ [TestScreen] Product ${productId} not found in integrated data`);
+    
+    // 🔧 FALLBACK: Si no se encuentra, crear un producto básico y agregarlo al cache
+    const fallbackProduct: Product = {
+      code: productId,
+      product_name: `Product ${productId.substring(0, 8)}`,
+      brands: 'Unknown Brand',
+      ingredients_text: 'Ingredients not available'
+    };
+    
+    // Agregar al sistema integrado para próximas veces
+    addProductToData(fallbackProduct);
+    console.log(`💾 [TestScreen] Added fallback product ${productId} to integrated data`);
+    
+    return fallbackProduct.product_name;
   };
 
   // Convert completed tests to history items
   const historyItems: HistoryItem[] = completedTests.map((test: TestItem): HistoryItem => ({
     date: formatDateForHistory(test.finishDate),
-    name: getProductName(test.itemID), // Get product name instead of ID
+    name: getProductName(test.itemID), // 🆕 Usar función actualizada
     status: test.result as 'Critic' | 'Safe' || 'Safe', // Default to 'Safe' if null
     notes: '', // No notes in the database structure
   }));
