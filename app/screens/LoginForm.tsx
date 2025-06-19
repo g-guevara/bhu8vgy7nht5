@@ -99,12 +99,12 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
     if (response?.type === 'success') {
       // Verificar bloqueos antes de proceder
       if (isDeviceBlocked) {
-        showToast('Dispositivo bloqueado por seguridad', 'error');
+        showToast('Device blocked for security reasons', 'error');
         return;
       }
 
       if (loginBlockStatus.isBlocked) {
-        showToast(`Intentos excedidos. Espera ${loginBlockStatus.minutesRemaining} minutos`, 'error');
+        showToast(`Attempts exceeded. Wait ${loginBlockStatus.minutesRemaining} minutes`, 'error');
         return;
       }
 
@@ -134,7 +134,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           // Save user data in SecureStore
           await saveUser(loginResponse.user);
           onLogin(loginResponse.user);
-          showToast('Acceso exitoso con Google', 'success');
+          showToast('Successful Google access', 'success');
         }
       } catch (error: any) {
         console.error("Google login error: ", error);
@@ -156,37 +156,37 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
   const handleLogin = async () => {
     // Validaciones básicas
     if (!loginEmail || !loginPassword) {
-      showToast('Por favor, completa todos los campos', 'error');
+      showToast('Please fill in all fields', 'error');
       return;
     }
 
     // Verificar si el dispositivo está bloqueado
     if (isDeviceBlocked) {
-      showToast('Dispositivo bloqueado por motivos de seguridad', 'error');
+      showToast('Device blocked for security reasons', 'error');
       return;
     }
 
     // Verificar si los intentos de login están bloqueados
     if (loginBlockStatus.isBlocked) {
       const timeText = loginBlockStatus.minutesRemaining === 1 
-        ? '1 minuto' 
-        : `${loginBlockStatus.minutesRemaining} minutos`;
-      showToast(`Demasiados intentos fallidos. Intenta en ${timeText}`, 'error');
+        ? '1 minute' 
+        : `${loginBlockStatus.minutesRemaining} minutes`;
+      showToast(`Too many failed attempts. Try again in ${timeText}`, 'error');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('[Login] Intentando login con email:', loginEmail);
+      console.log('[Login] Attempting login with email:', loginEmail);
       
       const response = await ApiService.login(loginEmail, loginPassword);
       
       if (!response.user) {
-        throw new Error('Respuesta de login inválida');
+        throw new Error('Invalid login response');
       }
       
       if (!response.user.userID && !response.user._id) {
-        throw new Error('El usuario no tiene ID válido');
+        throw new Error('User does not have valid ID');
       }
       
       // Login exitoso - limpiar intentos fallidos
@@ -195,7 +195,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
       // Save user data in SecureStore
       await saveUser(response.user);
       onLogin(response.user);
-      showToast('¡Bienvenido!', 'success');
+      showToast('Welcome!', 'success');
       
     } catch (error: any) {
       console.error("[Login] Error:", error);
@@ -219,7 +219,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
     if (!loginBlockStatus.isBlocked) {
       const remaining = 3 - loginBlockStatus.attemptsCount;
       if (loginBlockStatus.attemptsCount > 0 && remaining > 0) {
-        return `${remaining} intento${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}`;
+        return `${remaining} attempt${remaining !== 1 ? 's' : ''} remaining`;
       }
     }
     return null;
@@ -228,7 +228,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
   const getBlockedTimeText = () => {
     if (loginBlockStatus.isBlocked && loginBlockStatus.minutesRemaining > 0) {
       const minutes = loginBlockStatus.minutesRemaining;
-      return `Intenta en ${minutes} minuto${minutes !== 1 ? 's' : ''}`;
+      return `Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}`;
     }
     return null;
   };
@@ -246,7 +246,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           style={styles.logo}
         />
       </View>
-      <Text style={styles.title}>Iniciar Sesión</Text>
+      <Text style={styles.title}>Sign In</Text>
       
       {/* Mostrar advertencia de intentos restantes */}
       {getRemainingAttemptsText() && (
@@ -286,7 +286,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
             styles.passwordInput,
             loginBlockStatus.isBlocked && styles.inputDisabled
           ]}
-          placeholder="Contraseña"
+          placeholder="Password"
           value={loginPassword}
           onChangeText={setLoginPassword}
           secureTextEntry={!showPassword}
@@ -301,7 +301,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
             styles.showPasswordText,
             loginBlockStatus.isBlocked && styles.showPasswordTextDisabled
           ]}>
-            {showPassword ? 'Ocultar' : 'Mostrar'}
+            {showPassword ? 'Hide' : 'Show'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -317,7 +317,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Iniciar Sesión</Text>
+          <Text style={styles.buttonText}>Sign In</Text>
         )}
       </TouchableOpacity>
 
@@ -328,8 +328,8 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
         style={styles.forgotPasswordButton} 
         onPress={() => {
           Alert.alert(
-            'Recuperar Contraseña',
-            'Funcionalidad próximamente disponible',
+            'Recover Password',
+            'Feature coming soon',
             [{ text: 'OK' }]
           );
         }}
@@ -339,7 +339,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           styles.forgotPasswordText,
           loginBlockStatus.isBlocked && styles.forgotPasswordTextDisabled
         ]}>
-          ¿Olvidaste tu contraseña?
+          Forgot your password?
         </Text>
       </TouchableOpacity>
       
@@ -352,7 +352,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           styles.switchButtonText,
           loginBlockStatus.isBlocked && styles.switchButtonTextDisabled
         ]}>
-          ¿No tienes una cuenta? Regístrate
+          Don't have an account? Sign up
         </Text>
       </TouchableOpacity>
     </View>

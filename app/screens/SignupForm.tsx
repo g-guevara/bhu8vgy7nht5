@@ -43,7 +43,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
     score: 0,
     color: '#e74c3c',
     width: 0,
-    label: 'Muy Débil'
+    label: 'Very Weak'
   });
   
   const { showToast } = useToast();
@@ -95,33 +95,33 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
       case 1:
         color = '#e74c3c';
         width = 20;
-        label = 'Muy Débil';
+        label = 'Very Weak';
         break;
       case 2:
         color = '#e67e22';
         width = 40;
-        label = 'Débil';
+        label = 'Weak';
         break;
       case 3:
         color = '#f39c12';
         width = 60;
-        label = 'Aceptable';
+        label = 'Acceptable';
         break;
       case 4:
         color = '#2ecc71';
         width = 80;
-        label = 'Buena';
+        label = 'Good';
         break;
       case 5:
       case 6:
         color = '#27ae60';
         width = 100;
-        label = 'Excelente';
+        label = 'Excellent';
         break;
       default:
         color = '#e74c3c';
         width = 0;
-        label = 'Muy Débil';
+        label = 'Very Weak';
     }
     
     setPasswordStrength({ score, color, width, label });
@@ -134,13 +134,13 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
   const validatePassword = (password: string): boolean => {
     // Check if password has at least 8 characters
     if (password.length < 8) {
-      showToast('La contraseña debe tener al menos 8 caracteres', 'error');
+      showToast('Password must be at least 8 characters', 'error');
       return false;
     }
     
     // Check if password has at least one uppercase letter
     if (!/[A-Z]/.test(password)) {
-      showToast('La contraseña debe contener al menos una letra mayúscula', 'error');
+      showToast('Password must contain at least one uppercase letter', 'error');
       return false;
     }
     
@@ -150,26 +150,26 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
   const handleSignup = async () => {
     // Verificar si el dispositivo está bloqueado
     if (isDeviceBlocked) {
-      showToast('Dispositivo bloqueado por motivos de seguridad', 'error');
+      showToast('Device blocked for security reasons', 'error');
       return;
     }
 
     // Validaciones básicas
     if (!signupName || !signupEmail || !signupPassword || !confirmPassword) {
-      showToast('Por favor, completa todos los campos', 'error');
+      showToast('Please fill in all fields', 'error');
       return;
     }
 
     // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(signupEmail)) {
-      showToast('Por favor, ingresa un email válido', 'error');
+      showToast('Please enter a valid email', 'error');
       return;
     }
 
     // Check if passwords match
     if (signupPassword !== confirmPassword) {
-      showToast('Las contraseñas no coinciden', 'error');
+      showToast('Passwords do not match', 'error');
       return;
     }
 
@@ -184,7 +184,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
         name: signupName,
         email: signupEmail,
         password: signupPassword,
-        language: 'es'
+        language: 'en'
       });
 
       // Incrementar contador de cuentas creadas en este dispositivo
@@ -194,9 +194,9 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
       const newDeviceBlocked = await SecurityUtils.isDeviceBlocked();
       if (newDeviceBlocked) {
         setIsDeviceBlocked(true);
-        showToast('Cuenta creada exitosamente. Dispositivo alcanzó límite de seguridad.', 'warning');
+        showToast('Account created successfully. Device reached security limit.', 'warning');
       } else {
-        showToast('¡Cuenta creada exitosamente!', 'success');
+        showToast('Account created successfully!', 'success');
       }
       
       // Wait a moment before switching to login
@@ -213,11 +213,11 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
         score: 0,
         color: '#e74c3c',
         width: 0,
-        label: 'Muy Débil'
+        label: 'Very Weak'
       });
       
     } catch (error: any) {
-      console.error("Error en registro:", error);
+      console.error("Signup error:", error);
       
       // Usar mensajes de error amigables
       const friendlyError = getUserFriendlyError(error);
@@ -231,7 +231,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
   const getAccountLimitWarning = () => {
     if (accountsCreated >= 7 && accountsCreated < 10) {
       const remaining = 10 - accountsCreated;
-      return `Se pueden crear ${remaining} cuenta${remaining !== 1 ? 's' : ''} más en este dispositivo`;
+      return `${remaining} more account${remaining !== 1 ? 's' : ''} can be created on this device`;
     }
     return null;
   };
@@ -251,7 +251,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
         />
       </View>
       
-      <Text style={styles.title}>Crear Cuenta</Text>
+      <Text style={styles.title}>Create Account</Text>
       
       {/* Mostrar advertencia de límite de cuentas */}
       {getAccountLimitWarning() && (
@@ -264,7 +264,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
       
       <TextInput
         style={styles.input}
-        placeholder="Nombre completo"
+        placeholder="Full name"
         value={signupName}
         onChangeText={setSignupName}
         autoCapitalize="words"
@@ -282,7 +282,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
-          placeholder="Contraseña"
+          placeholder="Password"
           value={signupPassword}
           onChangeText={setSignupPassword}
           secureTextEntry={!showPassword}
@@ -292,7 +292,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
           onPress={() => setShowPassword(!showPassword)}
         >
           <Text style={styles.showPasswordText}>
-            {showPassword ? 'Ocultar' : 'Mostrar'}
+            {showPassword ? 'Hide' : 'Show'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -312,7 +312,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
             />
           </View>
           <Text style={[styles.passwordStrengthLabel, { color: passwordStrength.color }]}>
-            Seguridad: {passwordStrength.label}
+            Security: {passwordStrength.label}
           </Text>
         </View>
       )}
@@ -322,25 +322,25 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
           styles.requirementText, 
           signupPassword.length >= 8 ? styles.requirementMet : styles.requirementNotMet
         ]}>
-          • Al menos 8 caracteres
+          • At least 8 characters
         </Text>
         <Text style={[
           styles.requirementText, 
           /[A-Z]/.test(signupPassword) ? styles.requirementMet : styles.requirementNotMet
         ]}>
-          • Una letra mayúscula
+          • One uppercase letter
         </Text>
         <Text style={[
           styles.requirementText, 
           /[0-9]/.test(signupPassword) ? styles.requirementMet : styles.requirementNotMet
         ]}>
-          • Un número (recomendado)
+          • One number (recommended)
         </Text>
         <Text style={[
           styles.requirementText, 
           /[!@#$%^&*(),.?":{}|<>]/.test(signupPassword) ? styles.requirementMet : styles.requirementNotMet
         ]}>
-          • Un carácter especial (recomendado)
+          • One special character (recommended)
         </Text>
       </View>
       
@@ -348,7 +348,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
-          placeholder="Confirmar contraseña"
+          placeholder="Confirm password"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry={!showConfirmPassword}
@@ -358,7 +358,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
           onPress={() => setShowConfirmPassword(!showConfirmPassword)}
         >
           <Text style={styles.showPasswordText}>
-            {showConfirmPassword ? 'Ocultar' : 'Mostrar'}
+            {showConfirmPassword ? 'Hide' : 'Show'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -369,7 +369,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
           styles.passwordMatchText,
           signupPassword === confirmPassword ? styles.passwordMatch : styles.passwordNoMatch
         ]}>
-          {signupPassword === confirmPassword ? '✓ Las contraseñas coinciden' : '✗ Las contraseñas no coinciden'}
+          {signupPassword === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
         </Text>
       )}
       
@@ -381,7 +381,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Crear Cuenta</Text>
+          <Text style={styles.buttonText}>Create Account</Text>
         )}
       </TouchableOpacity>
       
@@ -390,7 +390,7 @@ export default function SignupForm({ onSwitchToLogin, apiUrl }: SignupFormProps)
         onPress={onSwitchToLogin}
       >
         <Text style={styles.switchButtonText}>
-          ¿Ya tienes una cuenta? Inicia sesión
+          Already have an account? Sign in
         </Text>
       </TouchableOpacity>
     </View>

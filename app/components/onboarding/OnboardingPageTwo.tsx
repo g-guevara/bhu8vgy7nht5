@@ -22,7 +22,7 @@ export default function OnboardingPageTwo() {
           <Text style={styles.title}>The Food</Text>
           
           <Text style={styles.description}>
-            This is the center of the app: all the details of a food. 
+            This is the center of the app: where you'll find all the details about a food item. To use the app effectively, follow these steps
           </Text>
         </View>
       </View>

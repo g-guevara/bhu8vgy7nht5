@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000',
     marginTop:20,
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: 'center',
   },
   taglineText: {

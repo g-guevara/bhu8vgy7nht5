@@ -41,30 +41,30 @@ export const getUserFriendlyError = (error: any): string => {
     
     switch (error.status) {
       case 0:
-        return 'Problema de conexión. Verifica tu internet e intenta nuevamente.';
+        return 'Connection problem. Check your internet and try again.';
       case 400:
-        return 'Parece que hay un problema con la información enviada. Por favor, revisa los datos e intenta nuevamente.';
+        return 'There seems to be a problem with the information sent. Please check the data and try again.';
       case 401:
-        return 'Las credenciales no son correctas. Verifica tu email y contraseña.';
+        return 'The credentials are not correct. Check your email and password.';
       case 403:
-        return 'No tienes permisos para realizar esta acción.';
+        return 'You don\'t have permission to perform this action.';
       case 404:
-        return 'No pudimos encontrar lo que buscas. El servicio podría estar temporalmente no disponible.';
+        return 'We couldn\'t find what you\'re looking for. The service might be temporarily unavailable.';
       case 409:
         console.log('[DEBUG] Email duplicate error (409) detected');
-        return 'Este email ya está registrado. ¿Ya tienes una cuenta?';
+        return 'This email is already registered. Do you already have an account?';
       case 429:
-        return 'Has hecho demasiadas solicitudes. Por favor, espera unos minutos antes de intentar nuevamente.';
+        return 'You have made too many requests. Please wait a few minutes before trying again.';
       case 500:
       case 502:
       case 503:
-        return 'Tenemos problemas técnicos temporales. Por favor, intenta en unos minutos.';
+        return 'We have temporary technical problems. Please try again in a few minutes.';
       default:
         // Si es un APIError pero no reconocemos el código, usar el mensaje del servidor
         if (error.response?.message) {
           return error.response.message;
         }
-        return 'Algo salió mal. Por favor, intenta nuevamente en unos momentos.';
+        return 'Something went wrong. Please try again in a few moments.';
     }
   }
 
@@ -72,24 +72,24 @@ export const getUserFriendlyError = (error: any): string => {
   if (errorCode) {
     switch (errorCode) {
       case 400:
-        return 'Parece que hay un problema con la información enviada. Por favor, revisa los datos e intenta nuevamente.';
+        return 'There seems to be a problem with the information sent. Please check the data and try again.';
       case 401:
-        return 'Las credenciales no son correctas. Verifica tu email y contraseña.';
+        return 'The credentials are not correct. Check your email and password.';
       case 403:
-        return 'No tienes permisos para realizar esta acción.';
+        return 'You don\'t have permission to perform this action.';
       case 404:
-        return 'No pudimos encontrar lo que buscas. El servicio podría estar temporalmente no disponible.';
+        return 'We couldn\'t find what you\'re looking for. The service might be temporarily unavailable.';
       case 409:
-        return 'Este email ya está registrado. ¿Ya tienes una cuenta?';
+        return 'This email is already registered. Do you already have an account?';
       case 429:
-        return 'Has hecho demasiadas solicitudes. Por favor, espera unos minutos antes de intentar nuevamente.';
+        return 'You have made too many requests. Please wait a few minutes before trying again.';
       case 500:
       case 502:
       case 503:
-        return 'Tenemos problemas técnicos temporales. Por favor, intenta en unos minutos.';
+        return 'We have temporary technical problems. Please try again in a few minutes.';
       case 'NETWORK_ERROR':
       case 'NetworkError':
-        return 'Parece que hay un problema de conexión. Verifica tu internet e intenta nuevamente.';
+        return 'There seems to be a connection problem. Check your internet and try again.';
     }
   }
 
@@ -100,48 +100,48 @@ export const getUserFriendlyError = (error: any): string => {
     // Buscar específicamente el status 409 en el mensaje
     if (message.includes('409') || message.includes('failed with status 409')) {
       console.log('[DEBUG] 409 detected in message');
-      return 'Este email ya está registrado. ¿Ya tienes una cuenta?';
+      return 'This email is already registered. Do you already have an account?';
     }
     
     // Otros patrones de detección
     if (message.includes('network') || message.includes('connection') || message.includes('internet')) {
-      return 'Problema de conexión. Verifica tu internet e intenta nuevamente.';
+      return 'Connection problem. Check your internet and try again.';
     }
     
     if (message.includes('timeout')) {
-      return 'La conexión está tardando mucho. Por favor, intenta nuevamente.';
+      return 'The connection is taking too long. Please try again.';
     }
     
     if (message.includes('email') && (message.includes('exist') || message.includes('already') || message.includes('registrado'))) {
-      return 'Este email ya está registrado. ¿Ya tienes una cuenta?';
+      return 'This email is already registered. Do you already have an account?';
     }
     
     if (message.includes('credencial') || message.includes('password') || message.includes('incorrect')) {
-      return 'Email o contraseña incorrectos. Revisa tus datos e intenta nuevamente.';
+      return 'Incorrect email or password. Check your data and try again.';
     }
     
     if (message.includes('required') || message.includes('missing')) {
-      return 'Por favor, completa todos los campos requeridos.';
+      return 'Please fill in all required fields.';
     }
     
     if (message.includes('invalid') && message.includes('email')) {
-      return 'El formato del email no es válido. Por favor, verifica e intenta nuevamente.';
+      return 'The email format is not valid. Please check and try again.';
     }
 
     // Detectar otros códigos de estado en el mensaje
     if (message.includes('400') || message.includes('failed with status 400')) {
-      return 'Parece que hay un problema con la información enviada. Por favor, revisa los datos e intenta nuevamente.';
+      return 'There seems to be a problem with the information sent. Please check the data and try again.';
     }
     
     if (message.includes('401') || message.includes('failed with status 401')) {
-      return 'Las credenciales no son correctas. Verifica tu email y contraseña.';
+      return 'The credentials are not correct. Check your email and password.';
     }
     
     if (message.includes('500') || message.includes('failed with status 500')) {
-      return 'Tenemos problemas técnicos temporales. Por favor, intenta en unos minutos.';
+      return 'We have temporary technical problems. Please try again in a few minutes.';
     }
   }
 
   // Error genérico amigable
-  return 'Algo salió mal. Por favor, intenta nuevamente en unos momentos.';
+  return 'Something went wrong. Please try again in a few moments.';
 };
