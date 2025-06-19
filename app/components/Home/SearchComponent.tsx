@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - CORREGIDO: No mostrar "no encontrado" hasta hacer búsqueda
+// app/components/Home/SearchComponent.tsx - CORREGIDO: Botón Search dinámico
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -409,20 +409,23 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           returnKeyType="search"
         />
         
-        <TouchableOpacity
-          style={[
-            searchStyles.searchButton,
-            (!searchText.trim() || searchLoading) && searchStyles.searchButtonDisabled
-          ]}
-          onPress={handleSearch}
-          disabled={!searchText.trim() || searchLoading}
-        >
-          {searchLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={searchStyles.searchButtonText}>Search</Text>
-          )}
-        </TouchableOpacity>
+        {/* 🔥 CAMBIO PRINCIPAL: Solo mostrar el botón cuando hay texto */}
+        {searchText.trim() && (
+          <TouchableOpacity
+            style={[
+              searchStyles.searchButton,
+              searchLoading && searchStyles.searchButtonDisabled
+            ]}
+            onPress={handleSearch}
+            disabled={searchLoading}
+          >
+            {searchLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={searchStyles.searchButtonText}>Search</Text>
+            )}
+          </TouchableOpacity>
+        )}
         
         {searchText && !searchLoading ? (
           <TouchableOpacity
