@@ -18,6 +18,7 @@ import OnboardingPageThree from './OnboardingPageThree';
 import OnboardingPageFour from './OnboardingPageFour';
 import OnboardingPageFive from './OnboardingPageFive';
 import OnboardingPageSix from './OnboardingPageSix';
+import OnboardingPageSeven from './OnboardingPageSeven';
 import OnboardingEndPage from './OnboardingEndPage';
 
 const { width } = Dimensions.get('window');
@@ -25,7 +26,7 @@ const { width } = Dimensions.get('window');
 export default function OnboardingView() {
   const [currentPage, setCurrentPage] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const totalPages = 7; // CORREGIDO: 7 páginas en total
+  const totalPages = 8; // CORREGIDO: 7 páginas en total
   const { hasSeenOnboarding } = useOnboarding();
 
   // Resetear a la primera página cuando se reinicia el onboarding
@@ -53,7 +54,8 @@ export default function OnboardingView() {
     <OnboardingPageFour key="3" />,
     <OnboardingPageFive key="4" />,
     <OnboardingPageSix key="5" />,
-    <OnboardingEndPage key="6" currentPage={currentPage} />
+    <OnboardingPageSeven key="6" />,
+    <OnboardingEndPage key="7" currentPage={currentPage} />
   ];
 
   return (

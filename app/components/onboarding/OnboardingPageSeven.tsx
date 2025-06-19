@@ -11,7 +11,7 @@ export default function OnboardingPageTwo() {
         {/* Imagen del mockup */}
         <View style={styles.imageContainer}>
           <Image 
-            source={require('../../../assets/images/onboarding/fullsc.png')}
+            source={require('../../../assets/images/onboarding/fullscend.png')}
             style={styles.image}
             resizeMode="contain"
           />
@@ -19,11 +19,10 @@ export default function OnboardingPageTwo() {
 
         {/* Textos separados de la imagen */}
         <View style={styles.textContainer}>
-          <Text style={styles.title}>The Food</Text>
+          <Text style={styles.title}>Remember:</Text>
           
           <Text style={styles.description}>
-            This is the center of the app: all the details of a food. 
-          </Text>
+Your journey to explore a new food goes from top to bottom, with your progress reflected in the navigation tab. Good luck!          </Text>
         </View>
       </View>
     </View>

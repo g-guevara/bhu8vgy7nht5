@@ -12,16 +12,22 @@ export default function OnboardingPageOne({ isTablet = false }: OnboardingPageOn
   return (
     <View style={styles.container}>
       <View style={styles.contentContainer}>
-        {/* Placeholder para las imágenes principales */}
+        {/* Logo principal del app */}
         <View style={[styles.imageContainer, { width: isTablet ? 300 : 280 }]}>
-          <View style={[styles.imagePlaceholder, styles.topImage]}>
-            <Text style={styles.placeholderText}>App Logo/Image</Text>
+          <View style={[styles.logoContainer, styles.topImage]}>
+            <Image 
+              source={require('../../../assets/images/icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
         </View>
 
+        {/* Textos de bienvenida */}
         <View style={[styles.imageContainer, { width: isTablet ? 300 : 280 }]}>
-          <View style={[styles.imagePlaceholder, styles.bottomImage]}>
-            <Text style={styles.placeholderText}>Welcome Image</Text>
+          <View style={[styles.welcomeContainer, styles.bottomImage]}>
+            <Text style={styles.welcomeText}>Sensitive Foods</Text>
+            <Text style={styles.taglineText}>No more guessing—understand your body's reactions and build a diet that supports you</Text>
           </View>
         </View>
       </View>
@@ -51,25 +57,50 @@ const styles = StyleSheet.create({
   imageContainer: {
     marginBottom: 20,
   },
-  imagePlaceholder: {
-    backgroundColor: '#F0F0F0',
-    borderRadius: 15,
+  
+  // Contenedor del logo principal
+  logoContainer: {
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(128, 128, 128, 0.3)',
   },
+  logoImage: {
+    width: '160%',
+    height: '160%',
+  },
+  
+  // Contenedor de bienvenida
+  welcomeContainer: {
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
+  welcomeText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop:20,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  taglineText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  
+  // Tamaños de las imágenes
   topImage: {
     height: 200,
   },
   bottomImage: {
-    height: 200,
+    height: 120,
   },
-  placeholderText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '500',
-  },
+  
+  // Instrucciones
   instructionContainer: {
     paddingBottom: 30,
     paddingHorizontal: 20,

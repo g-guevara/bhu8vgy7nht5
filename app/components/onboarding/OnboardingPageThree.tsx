@@ -22,7 +22,7 @@ export default function OnboardingPageThree() {
         <Text style={styles.title}>1.- Search Food</Text>
         
         <Text style={styles.description}>
-            Search and explore a wide range of products in our app and see key details like photos, brand, and ingredients.        </Text>
+            First, you can search and explore a wide range of products in our app and see key details like photos, brand, and ingredients.        </Text>
       </View>
     </View>
   );
