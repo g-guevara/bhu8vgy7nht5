@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - Corregido para TypeScript
+// app/components/Home/SearchComponent.tsx - CORREGIDO: No mostrar "no encontrado" hasta hacer búsqueda
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -36,6 +36,9 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const [historyItems, setHistoryItems] = useState<ProductWithImageAndEmoji[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  
+  // 🔥 NUEVO: Estado para trackear si se ha realizado una búsqueda
+  const [hasSearched, setHasSearched] = useState(false);
   
   // 🆕 Estados para mostrar información del cache
   const [cacheStats, setCacheStats] = useState<{
@@ -234,18 +237,23 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     return results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   };
 
-  // FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA
+  // 🔥 FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON hasSearched
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
     if (!searchQuery) {
       setSearchResults([]);
       setCurrentPage(1);
+      // 🔥 IMPORTANTE: Resetear hasSearched cuando se limpia la búsqueda
+      setHasSearched(false);
       return;
     }
 
     setSearchLoading(true);
     setCurrentPage(1);
+    // 🔥 IMPORTANTE: Marcar que se ha realizado una búsqueda
+    setHasSearched(true);
+    
     try {
       console.log(`🔍 Starting hybrid search for: "${searchQuery}"`);
       
@@ -383,7 +391,14 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           style={searchStyles.searchInput}
           placeholder="Search"
           value={searchText}
-          onChangeText={setSearchText}
+          onChangeText={(text) => {
+            setSearchText(text);
+            // 🔥 IMPORTANTE: Si se borra el texto, resetear hasSearched
+            if (!text.trim()) {
+              setHasSearched(false);
+              setSearchResults([]);
+            }
+          }}
           onFocus={() => onFocusChange(true)}
           onBlur={() => {
             if (!searchText) {
@@ -416,6 +431,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
               setSearchText('');
               setSearchResults([]);
               setCurrentPage(1);
+              // 🔥 IMPORTANTE: Resetear hasSearched al limpiar
+              setHasSearched(false);
               onFocusChange(false);
             }}
           >
@@ -423,8 +440,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           </TouchableOpacity>
         ) : null}
       </View>
-
-
 
       <View style={searchStyles.resultsContainer}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -513,7 +528,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
               )}
             </View>
           </>
-        ) : searchText && searchResults.length === 0 ? (
+        ) : hasSearched && searchText && searchResults.length === 0 ? (
+          // 🔥 CAMBIO CRÍTICO: Solo mostrar "no encontrado" si hasSearched es true
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>
