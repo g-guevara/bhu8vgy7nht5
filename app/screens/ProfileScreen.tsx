@@ -1,4 +1,6 @@
 // app/screens/ProfileScreen.tsx
+// FIXED: Actualización automática del trial period
+
 import React, { useState } from 'react';
 import {
   View,
@@ -33,11 +35,15 @@ export default function ProfileScreen({ user, onLogout, onClose }: ProfileScreen
   const [confirmPassword, setConfirmPassword] = useState('');
   const [trialDays, setTrialDays] = useState(user.trialPeriodDays.toString());
   const [loading, setLoading] = useState(false);
+  
+  // 🔥 NUEVO: Estado local para los datos del usuario que se pueden actualizar
+  const [localTrialPeriod, setLocalTrialPeriod] = useState(user.trialPeriodDays);
+  
   const { showToast } = useToast();
   const { resetOnboardingForTutorial } = useOnboarding();
 
   const handleRepeatTutorial = () => {
-    console.log('🔄 Repeat Tutorial button pressed'); // Debug log
+    console.log('🔄 Repeat Tutorial button pressed');
     
     try {
       showToast('Starting tutorial...', 'success');
@@ -48,7 +54,7 @@ export default function ProfileScreen({ user, onLogout, onClose }: ProfileScreen
       // Llamar la función para resetear el onboarding inmediatamente
       resetOnboardingForTutorial();
       
-      console.log('✅ resetOnboardingForTutorial called successfully'); // Debug log
+      console.log('✅ resetOnboardingForTutorial called successfully');
     } catch (error) {
       console.error('❌ Error in handleRepeatTutorial:', error);
       showToast('Error starting tutorial', 'error');
@@ -90,14 +96,25 @@ export default function ProfileScreen({ user, onLogout, onClose }: ProfileScreen
 
     setLoading(true);
     try {
+      console.log('💾 Updating trial period to:', days);
+      
+      // Actualizar en el backend
       await ApiService.updateTrialPeriod(days);
+      
+      // 🔥 NUEVO: Actualizar el estado local inmediatamente
+      setLocalTrialPeriod(days);
+      console.log('✅ Local trial period updated to:', days);
+      
       showToast('Trial period updated successfully', 'success');
       setShowTrialModal(false);
-      // Update local user data
+      
+      // También actualizar el objeto user (aunque esto no es la solución principal)
       if (user) {
         user.trialPeriodDays = days;
       }
+      
     } catch (error: any) {
+      console.error('❌ Error updating trial period:', error);
       showToast(error.message || 'Failed to update trial period', 'error');
     } finally {
       setLoading(false);
@@ -139,16 +156,20 @@ export default function ProfileScreen({ user, onLogout, onClose }: ProfileScreen
           <View style={styles.infoSection}>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Trial Period</Text>
-              <Text style={styles.infoValue}>{user.trialPeriodDays} days</Text>
+              {/* 🔥 NUEVO: Usar el estado local en lugar del prop */}
+              <Text style={styles.infoValue}>{localTrialPeriod} days</Text>
             </View>
           </View>
 
           <View style={styles.actionSection}>
 
-
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => setShowTrialModal(true)}
+              onPress={() => {
+                // 🔥 NUEVO: Actualizar trialDays con el valor actual al abrir modal
+                setTrialDays(localTrialPeriod.toString());
+                setShowTrialModal(true);
+              }}
             >
               <Text style={styles.actionButtonText}>Modify Trial Period</Text>
             </TouchableOpacity>
