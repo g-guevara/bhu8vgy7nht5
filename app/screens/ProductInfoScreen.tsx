@@ -440,7 +440,7 @@ export default function ProductInfoScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={28} color="#000" />
-            <Text style={styles.backText}>Home</Text>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
           {/* Botón de estadísticas en desarrollo */}
@@ -470,7 +470,7 @@ export default function ProductInfoScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={28} color="#000" />
-            <Text style={styles.backText}>Home</Text>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Information</Text>
         </View>
@@ -490,7 +490,7 @@ export default function ProductInfoScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={28} color="#000" />
-          <Text style={styles.backText}>Home</Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Information</Text>
       </View>

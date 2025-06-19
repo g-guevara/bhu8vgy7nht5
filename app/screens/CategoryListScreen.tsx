@@ -320,8 +320,8 @@ export default function CategoryListScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={28} color="#007AFF" />
-            <Text style={styles.backText}>Home</Text>
+            <Ionicons name="chevron-back" size={28} color="#000" />
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{category} Products</Text>
         </View>
@@ -336,8 +336,8 @@ export default function CategoryListScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#007AFF" />
-          <Text style={styles.backText}>Home</Text>
+          <Ionicons name="chevron-back" size={28} color="#000" />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{category} Products</Text>
       </View>
