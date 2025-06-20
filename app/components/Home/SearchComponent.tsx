@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - CORREGIDO: Priorizar image_url para productos SSS
+// app/components/Home/SearchComponent.tsx - FIXED: Corrected image_url property access
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -149,7 +149,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url para productos SSS
+  // 🔥 FUNCIÓN CORREGIDA: Cargar imágenes priorizando image_url para productos SSS
   const loadImagesForProductsFixed = async (
     products: ProductWithImageAndEmoji[], 
     setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
@@ -162,7 +162,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // 🔥 NUEVA FUNCIÓN: Cargar imagen priorizando image_url
+  // 🔥 FUNCIÓN CORREGIDA: Cargar imagen priorizando image_url
   const loadProductImageFixed = async (
     product: ProductWithImageAndEmoji,
     setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
@@ -177,16 +177,18 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
 
       console.log(`🔍 [Search] Buscando imagen para producto: ${product.code}`);
       
-      // 🚀 PRIORIDAD 1: USAR IMAGE_URL SI EXISTE (productos SSS)
-      if (product.image_url && product.image_url.trim()) {
-        console.log(`🖼️ [Search] Usando image_url directa para ${product.code}: ${product.image_url}`);
+      // 🚀 PRIORIDAD 1: USAR image_url SI EXISTE (productos SSS)
+      // FIXED: Acceder a image_url desde el producto base
+      const productWithImageUrl = product as Product & ProductWithImageAndEmoji;
+      if (productWithImageUrl.image_url && productWithImageUrl.image_url.trim()) {
+        console.log(`🖼️ [Search] Usando image_url directa para ${product.code}: ${productWithImageUrl.image_url}`);
         
         // Actualizar con la URL directa
         setProducts(prevProducts => 
           prevProducts.map(p => 
             p.code === product.code ? { 
               ...p, 
-              imageUri: product.image_url,
+              imageUri: productWithImageUrl.image_url,
               imageLoading: false, 
               imageError: false 
             } : p
@@ -280,13 +282,14 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         // Agregar resultados de API al cache para próximas búsquedas
         if (newApiResults.length > 0) {
+          // FIXED: Mapear correctamente las propiedades
           const productsToCache = newApiResults.map(product => ({
             code: product.code,
             product_name: product.product_name,
             brands: product.brands,
             ingredients_text: product.ingredients_text,
-            // 🔧 FIX: Usar imageUri en lugar de image_url para consistencia
-            image_url: product.imageUri || undefined
+            // FIXED: Preservar image_url si existe en el resultado de API
+            image_url: (product as any).image_url || undefined
           }));
           
           addProductsToData(productsToCache);
@@ -361,13 +364,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     // Agregar producto al sistema integrado si no existe
     const existingProduct = findProductInData(product.code);
     if (!existingProduct) {
+      // FIXED: Preservar image_url del producto original
+      const productWithImageUrl = product as Product & ProductWithImageAndEmoji;
       addProductsToData([{
         code: product.code,
         product_name: product.product_name,
         brands: product.brands,
         ingredients_text: product.ingredients_text,
-        // 🔧 FIX: Usar imageUri en lugar de image_url
-        image_url: product.imageUri || undefined
+        // FIXED: Usar image_url del producto original si existe
+        image_url: productWithImageUrl.image_url || undefined
       }]);
     }
     
