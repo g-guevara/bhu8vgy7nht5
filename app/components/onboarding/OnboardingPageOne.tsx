@@ -1,8 +1,8 @@
-// app/components/onboarding/OnboardingPageOne.tsx - SOLO FIX DEL TEXTO
+// app/components/onboarding/OnboardingPageOne.tsx
 import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 interface OnboardingPageOneProps {
   isTablet?: boolean;
@@ -13,25 +13,26 @@ export default function OnboardingPageOne({ isTablet = false }: OnboardingPageOn
     <View style={styles.container}>
       <View style={styles.contentContainer}>
         {/* Logo principal del app */}
-        <View style={[styles.imageContainer, { width: isTablet ? 300 : 280 }]}>
-          <View style={[styles.logoContainer, styles.topImage]}>
-            <Image 
-              source={require('../../../assets/images/icon.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
+        <View style={styles.logoSection}>
+          <Image 
+            source={require('../../../assets/images/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Textos de bienvenida */}
-        <View style={[styles.imageContainer, { width: isTablet ? 300 : 280 }]}>
-          <View style={[styles.welcomeContainer, styles.bottomImage]}>
-            <Text style={styles.welcomeText}>Sensitive Foods</Text>
-            <Text style={styles.taglineText}>No more guessing—understand your body's reactions and build a diet that supports you</Text>
-          </View>
+        <View style={styles.textSection}>
+          <Text style={styles.welcomeText}>Sensitive Foods</Text>
+          <Text style={styles.taglineText}>
+            No more guessing—understand{'\n'}
+            your body's reactions and build{'\n'}
+            a diet that supports you
+          </Text>
         </View>
       </View>
 
+      {/* Instrucciones */}
       <View style={styles.instructionContainer}>
         <View style={styles.instructionRow}>
           <Text style={styles.instructionText}>Swipe left to continue</Text>
@@ -46,65 +47,52 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    justifyContent: 'space-between',
   },
   contentContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
-  },
-  imageContainer: {
-    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   
-  // Contenedor del logo principal
-  logoContainer: {
-    backgroundColor: 'transparent',
+  // Sección del logo
+  logoSection: {
+    width: 200,
+    height: 200,
+    marginBottom: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logoImage: {
-    width: '160%',
-    height: '160%',
+    width: '100%',
+    height: '100%',
   },
   
-  // Contenedor de bienvenida
-  welcomeContainer: {
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
+  // Sección de texto
+  textSection: {
     alignItems: 'center',
-    paddingVertical: 30,
     paddingHorizontal: 20,
+    width: '100%',
   },
   welcomeText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#000',
-    marginTop: 20,
-    marginBottom: 16,
+    marginBottom: 20,
     textAlign: 'center',
-    lineHeight: 30, // ✅ SOLO ESTE CAMBIO - Agregado lineHeight para evitar corte
   },
   taglineText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
-    lineHeight: 22, // ✅ SOLO ESTE CAMBIO - Agregado lineHeight para mejor espaciado
-  },
-  
-  // Tamaños de las imágenes
-  topImage: {
-    height: 200,
-  },
-  bottomImage: {
-    height: 120,
+    lineHeight: 22,
+    letterSpacing: 0.3,
   },
   
   // Instrucciones
   instructionContainer: {
-    paddingBottom: 30,
+    paddingBottom: 40,
     paddingHorizontal: 20,
   },
   instructionRow: {
