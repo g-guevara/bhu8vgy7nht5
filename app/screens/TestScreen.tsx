@@ -1,5 +1,6 @@
 // app/screens/TestScreen.tsx
 // FIXED: Updated to use integrated cache system from productData.ts
+// FIXED: Sensitive status color logic corrected
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -37,10 +38,11 @@ export interface TestItem {
   result: 'Critic' | 'Sensitive' | 'Safe' | null;
 }
 
+// 🔥 FIXED: Actualizar interfaz para incluir 'Sensitive'
 export interface HistoryItem {
   date: string;
   name: string;
-  status: 'Critic' | 'Safe';
+  status: 'Critic' | 'Sensitive' | 'Safe'; // 🔥 FIXED: Agregar 'Sensitive'
   notes?: string;
 }
 
@@ -218,11 +220,11 @@ export default function TestScreen(): JSX.Element {
     return fallbackProduct.product_name;
   };
 
-  // Convert completed tests to history items
+  // 🔥 FIXED: Convert completed tests to history items con soporte para 'Sensitive'
   const historyItems: HistoryItem[] = completedTests.map((test: TestItem): HistoryItem => ({
     date: formatDateForHistory(test.finishDate),
     name: getProductName(test.itemID), // 🆕 Usar función actualizada
-    status: test.result as 'Critic' | 'Safe' || 'Safe', // Default to 'Safe' if null
+    status: test.result as 'Critic' | 'Sensitive' | 'Safe' || 'Safe', // 🔥 FIXED: Incluir 'Sensitive'
     notes: '', // No notes in the database structure
   }));
 
@@ -274,9 +276,12 @@ export default function TestScreen(): JSX.Element {
               <View key={index} style={styles.historyItem}>
                 <View style={styles.historyHeader}>
                   <Text style={styles.historyDate}>{item.date}</Text>
+                  {/* 🔥 FIXED: Lógica condicional para los 3 tipos de reacciones */}
                   <Text style={[
                     styles.historyStatus,
-                    item.status === 'Critic' ? styles.criticStatus : styles.safeStatus
+                    item.status === 'Critic' ? styles.criticStatus :
+                    item.status === 'Sensitive' ? styles.sensitiveStatus :
+                    styles.safeStatus
                   ]}>
                     {item.status}
                   </Text>

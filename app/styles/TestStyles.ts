@@ -188,6 +188,9 @@ export const styles = StyleSheet.create({
   criticStatus: {
     color: '#FF3B30',
   },
+  sensitiveStatus: {
+    color: '#FF9500', // 🔥 NUEVO: Naranja para Sensitive
+  },
   safeStatus: {
     color: '#34C759',
   },
