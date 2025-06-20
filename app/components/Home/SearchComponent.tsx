@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - CORREGIDO: Botón Search dinámico
+// app/components/Home/SearchComponent.tsx - CORREGIDO: Botón X aparece inmediatamente al hacer foco
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -39,6 +39,9 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   
   // 🔥 NUEVO: Estado para trackear si se ha realizado una búsqueda
   const [hasSearched, setHasSearched] = useState(false);
+  
+  // 🆕 NUEVO: Estado para trackear si el input está enfocado
+  const [isInputFocused, setIsInputFocused] = useState(false);
   
   // 🆕 Estados para mostrar información del cache
   const [cacheStats, setCacheStats] = useState<{
@@ -399,8 +402,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
               setSearchResults([]);
             }
           }}
-          onFocus={() => onFocusChange(true)}
+          onFocus={() => {
+            setIsInputFocused(true);
+            onFocusChange(true);
+          }}
           onBlur={() => {
+            setIsInputFocused(false);
             if (!searchText) {
               onFocusChange(false);
             }
@@ -427,7 +434,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           </TouchableOpacity>
         )}
         
-        {searchText && !searchLoading ? (
+        {/* 🔥 CORRECCIÓN PRINCIPAL: Mostrar X cuando está enfocado O hay texto */}
+        {(isInputFocused || searchText) && !searchLoading ? (
           <TouchableOpacity
             style={searchStyles.clearButton}
             onPress={() => {
@@ -436,6 +444,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
               setCurrentPage(1);
               // 🔥 IMPORTANTE: Resetear hasSearched al limpiar
               setHasSearched(false);
+              setIsInputFocused(false); // Para que el input pierda foco
               onFocusChange(false);
             }}
           >

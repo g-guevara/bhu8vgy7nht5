@@ -1,4 +1,4 @@
-// app/components/onboarding/OnboardingPageOne.tsx
+// app/components/onboarding/OnboardingPageOne.tsx - SOLO FIX DEL TEXTO
 import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 
@@ -81,15 +81,17 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: 'bold',
     color: '#000',
-    marginTop:20,
+    marginTop: 20,
     marginBottom: 16,
     textAlign: 'center',
+    lineHeight: 30, // ✅ SOLO ESTE CAMBIO - Agregado lineHeight para evitar corte
   },
   taglineText: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
+    lineHeight: 22, // ✅ SOLO ESTE CAMBIO - Agregado lineHeight para mejor espaciado
   },
   
   // Tamaños de las imágenes

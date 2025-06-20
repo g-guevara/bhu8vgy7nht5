@@ -321,7 +321,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
         )}
       </TouchableOpacity>
 
-      {/* Google Sign-In Button */}
+      {/* Google Sign-In Button 
 
 
       <TouchableOpacity 
@@ -342,7 +342,7 @@ export default function LoginForm({ onLogin, onSwitchToSignup, apiUrl }: LoginFo
           Forgot your password?
         </Text>
       </TouchableOpacity>
-      
+      */}
       <TouchableOpacity 
         style={styles.switchButton} 
         onPress={onSwitchToSignup}
