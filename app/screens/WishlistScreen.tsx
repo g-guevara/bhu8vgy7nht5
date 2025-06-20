@@ -1,4 +1,4 @@
-// app/screens/WishlistScreen.tsx - CORREGIDO CON CACHE DE IMÁGENES
+// app/screens/WishlistScreen.tsx - CORREGIDO: Priorizar image_url para productos SSS
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
@@ -18,7 +18,6 @@ import { styles } from '../styles/WishlistStyles';
 import { ApiService } from '../services/api';
 import { useToast } from '../utils/ToastContext';
 import { sampleProducts } from '../data/productData';
-// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
 import { imageCacheUtils } from '../utils/imageCacheUtils';
 
 // Define interfaces for our data
@@ -33,7 +32,7 @@ interface Product {
   code: string;
   product_name: string;
   brands: string;
-  image_url?: string; // 🔧 Hacer opcional para compatibilidad
+  image_url?: string;
   ingredients_text: string;
 }
 
@@ -49,7 +48,6 @@ export default function WishlistScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 🆕 CAMBIAR TIPO DE ESTADO PARA INCLUIR IMAGEN CACHE
   const [wishlistProducts, setWishlistProducts] = useState<ProductWithImage[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductWithImage[]>([]);
   const { showToast } = useToast();
@@ -62,32 +60,54 @@ export default function WishlistScreen() {
     return '';
   };
 
-  // 🆕 FUNCIÓN PARA CARGAR IMÁGENES DESDE CACHE
-  const loadImagesForProducts = async (products: ProductWithImage[]) => {
+  // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url para productos SSS
+  const loadImagesForProductsFixed = async (products: ProductWithImage[]) => {
     console.log(`🖼️ [Wishlist] Cargando imágenes para ${products.length} productos...`);
     
     // Procesar productos con un pequeño delay para evitar sobrecarga
     for (let i = 0; i < products.length; i++) {
-      setTimeout(() => loadProductImage(products[i]), i * 100);
+      setTimeout(() => loadProductImageFixed(products[i]), i * 100);
     }
   };
 
-  // 🆕 FUNCIÓN PARA CARGAR IMAGEN DE UN PRODUCTO ESPECÍFICO
-  const loadProductImage = async (product: ProductWithImage) => {
+  // 🔥 NUEVA FUNCIÓN: Cargar imagen priorizando image_url
+  const loadProductImageFixed = async (product: ProductWithImage) => {
     try {
       // Marcar como cargando
-      setWishlistProducts(prevProducts => 
+      const updateFunction = (prevProducts: ProductWithImage[]) => 
         prevProducts.map(p => 
           p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
-        )
-      );
-      setFilteredProducts(prevProducts => 
-        prevProducts.map(p => 
-          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
-        )
-      );
+        );
+
+      setWishlistProducts(updateFunction);
+      setFilteredProducts(updateFunction);
 
       console.log(`🔍 [Wishlist] Buscando imagen para producto: ${product.code}`);
+      
+      // 🚀 PRIORIDAD 1: USAR IMAGE_URL SI EXISTE (productos SSS)
+      if (product.image_url && product.image_url.trim()) {
+        console.log(`🖼️ [Wishlist] Usando image_url directa para ${product.code}: ${product.image_url}`);
+        
+        // Actualizar con la URL directa
+        const updateWithImage = (prevProducts: ProductWithImage[]) => 
+          prevProducts.map(p => 
+            p.code === product.code ? { 
+              ...p, 
+              imageUri: product.image_url,
+              imageLoading: false, 
+              imageError: false 
+            } : p
+          );
+
+        setWishlistProducts(updateWithImage);
+        setFilteredProducts(updateWithImage);
+        
+        console.log(`✅ [Wishlist] Imagen directa configurada para producto: ${product.code}`);
+        return;
+      }
+      
+      // 🔍 FALLBACK: Buscar en OpenFoodFacts solo si NO tiene image_url
+      console.log(`🌐 [Wishlist] No tiene image_url, buscando en OpenFoodFacts para: ${product.code}`);
       
       // ⏱️ TIMEOUT DE 30 SEGUNDOS
       const timeoutPromise = new Promise<string | null>((_, reject) => {
@@ -100,7 +120,7 @@ export default function WishlistScreen() {
       const imageUri = await Promise.race([imagePromise, timeoutPromise]);
       
       // Actualizar ambos estados con la imagen obtenida
-      const updateFunction = (prevProducts: ProductWithImage[]) => 
+      const updateWithResult = (prevProducts: ProductWithImage[]) => 
         prevProducts.map(p => 
           p.code === product.code ? { 
             ...p, 
@@ -110,11 +130,11 @@ export default function WishlistScreen() {
           } : p
         );
 
-      setWishlistProducts(updateFunction);
-      setFilteredProducts(updateFunction);
+      setWishlistProducts(updateWithResult);
+      setFilteredProducts(updateWithResult);
 
       if (imageUri) {
-        console.log(`✅ [Wishlist] Imagen cargada para producto: ${product.code}`);
+        console.log(`✅ [Wishlist] Imagen de OpenFoodFacts cargada para producto: ${product.code}`);
       } else {
         console.log(`❌ [Wishlist] No se encontró imagen para producto: ${product.code}`);
       }
@@ -122,13 +142,13 @@ export default function WishlistScreen() {
       console.error(`❌ [Wishlist] Error cargando imagen para producto ${product.code}:`, error);
       
       // Actualizar estado con error
-      const updateFunction = (prevProducts: ProductWithImage[]) => 
+      const updateWithError = (prevProducts: ProductWithImage[]) => 
         prevProducts.map(p => 
           p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
         );
 
-      setWishlistProducts(updateFunction);
-      setFilteredProducts(updateFunction);
+      setWishlistProducts(updateWithError);
+      setFilteredProducts(updateWithError);
     }
   };
 
@@ -177,10 +197,10 @@ export default function WishlistScreen() {
         setFilteredProducts(productsWithImageState);
       }
       
-      // 🆕 CARGAR IMÁGENES DESPUÉS DE CONFIGURAR LOS PRODUCTOS
+      // 🔥 CARGAR IMÁGENES PRIORIZANDO IMAGE_URL
       if (productsWithImageState.length > 0) {
         console.log(`🚀 [Wishlist] Iniciando carga de imágenes para ${productsWithImageState.length} productos`);
-        loadImagesForProducts(productsWithImageState);
+        loadImagesForProductsFixed(productsWithImageState);
       }
       
     } catch (error: any) {
@@ -246,7 +266,7 @@ export default function WishlistScreen() {
     }
   };
 
-  // 🆕 COMPONENTE DE IMAGEN CON CACHE
+  // 🔥 COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL
   const ProductImageWithCache: React.FC<{ product: ProductWithImage }> = ({ product }) => {
     if (product.imageLoading) {
       return (
@@ -300,7 +320,7 @@ export default function WishlistScreen() {
       style={styles.productItem}
       onPress={() => handleProductPress(item)}
     >
-      {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+      {/* 🔥 USAR COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL */}
       <ProductImageWithCache product={item} />
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.product_name}</Text>

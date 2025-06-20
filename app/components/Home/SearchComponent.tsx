@@ -1,4 +1,4 @@
-// app/components/Home/SearchComponent.tsx - CORREGIDO: Botón X aparece inmediatamente al hacer foco
+// app/components/Home/SearchComponent.tsx - CORREGIDO: Priorizar image_url para productos SSS
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -134,9 +134,9 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         setHistoryItems(historyProducts);
         
-        // Cargar imágenes para items del historial
+        // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url
         if (historyProducts.length > 0) {
-          loadImagesForProducts(historyProducts, setHistoryItems);
+          loadImagesForProductsFixed(historyProducts, setHistoryItems);
         }
       } else {
         setHistoryItems([]);
@@ -146,6 +146,72 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       setHistoryItems([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url para productos SSS
+  const loadImagesForProductsFixed = async (
+    products: ProductWithImageAndEmoji[], 
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
+  ) => {
+    console.log(`🖼️ [Search] Cargando imágenes para ${products.length} productos...`);
+    
+    // Procesar productos con un pequeño delay para evitar sobrecarga
+    for (let i = 0; i < products.length; i++) {
+      setTimeout(() => loadProductImageFixed(products[i], setProducts), i * 100);
+    }
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Cargar imagen priorizando image_url
+  const loadProductImageFixed = async (
+    product: ProductWithImageAndEmoji,
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
+  ) => {
+    try {
+      // Marcar como cargando
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: true, imageError: false } : p
+        )
+      );
+
+      console.log(`🔍 [Search] Buscando imagen para producto: ${product.code}`);
+      
+      // 🚀 PRIORIDAD 1: USAR IMAGE_URL SI EXISTE (productos SSS)
+      if (product.image_url && product.image_url.trim()) {
+        console.log(`🖼️ [Search] Usando image_url directa para ${product.code}: ${product.image_url}`);
+        
+        // Actualizar con la URL directa
+        setProducts(prevProducts => 
+          prevProducts.map(p => 
+            p.code === product.code ? { 
+              ...p, 
+              imageUri: product.image_url,
+              imageLoading: false, 
+              imageError: false 
+            } : p
+          )
+        );
+        
+        console.log(`✅ [Search] Imagen directa configurada para producto: ${product.code}`);
+        return;
+      }
+      
+      // 🔍 FALLBACK: Buscar en OpenFoodFacts solo si NO tiene image_url
+      console.log(`🌐 [Search] No tiene image_url, buscando en OpenFoodFacts para: ${product.code}`);
+      
+      // Usar la función existente de productUtils.tsx
+      loadImagesForProducts([product], setProducts);
+      
+    } catch (error) {
+      console.error(`❌ [Search] Error cargando imagen para producto ${product.code}:`, error);
+      
+      // Actualizar estado con error
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+        )
+      );
     }
   };
 
@@ -267,10 +333,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       console.log(`✅ Hybrid search completed: ${results.length} total results`);
       
-      // Cargar imágenes solo para la primera página
+      // 🔥 CARGAR IMÁGENES PRIORIZANDO IMAGE_URL
       if (results.length > 0) {
         const firstPageResults = results.slice(0, RESULTS_PER_PAGE);
-        loadImagesForProducts(firstPageResults, setSearchResults);
+        loadImagesForProductsFixed(firstPageResults, setSearchResults);
         console.log(`📸 Loading images for first ${firstPageResults.length} products`);
       }
       
@@ -315,7 +381,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     return `DB${info.db} - ${info.collection}`;
   };
 
-  // Funciones de paginación (sin cambios)
+  // Funciones de paginación
   const getTotalPages = () => Math.ceil(searchResults.length / RESULTS_PER_PAGE);
   
   const getCurrentPageResults = () => {
@@ -339,7 +405,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       if (productsNeedingImages.length > 0) {
         console.log(`📸 Page ${page}: Loading images for ${productsNeedingImages.length} new products`);
-        loadImagesForProducts(productsNeedingImages, setSearchResults);
+        loadImagesForProductsFixed(productsNeedingImages, setSearchResults);
       }
     }
   };

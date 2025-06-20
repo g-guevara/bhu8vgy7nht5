@@ -1,4 +1,4 @@
-// app/screens/ReactionsScreen.tsx - CORREGIDO CON CACHE DE IMÁGENES
+// app/screens/ReactionsScreen.tsx - CORREGIDO: Priorizar image_url para productos SSS
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -17,7 +17,6 @@ import { styles } from '../styles/ReactionStyles';
 import { ApiService } from '../services/api';
 import { sampleProducts } from '../data/productData';
 import { useToast } from '../utils/ToastContext';
-// 🆕 IMPORTAR EL SISTEMA DE CACHE DE IMÁGENES
 import { imageCacheUtils } from '../utils/imageCacheUtils';
 
 type TabName = 'All' | 'Organic' | 'Product' | 'Ing';
@@ -45,7 +44,7 @@ interface Product {
   product_name: string;
   brands: string;
   ingredients_text: string;
-  image_url?: string; // 🔧 Hacer opcional
+  image_url?: string;
 }
 
 // 🆕 INTERFAZ EXTENDIDA PARA PRODUCTOS CON CACHE DE IMÁGENES
@@ -195,7 +194,6 @@ export default function ReactionsScreen() {
   const [activeTab, setActiveTab] = useState<TabName>('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // 🆕 CAMBIAR TIPO DE ESTADO PARA INCLUIR IMAGEN CACHE
   const [productReactions, setProductReactions] = useState<ProductWithReaction[]>([]);
   const [ingredientReactions, setIngredientReactions] = useState<IngredientReaction[]>([]);
   const [groupedIngredients, setGroupedIngredients] = useState<AlphabeticalGroup[]>([]);
@@ -238,18 +236,18 @@ export default function ReactionsScreen() {
     }
   }, [activeTab]);
 
-  // 🆕 FUNCIÓN PARA CARGAR IMÁGENES DESDE CACHE
-  const loadImagesForProducts = async (products: ProductWithReaction[]) => {
+  // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url para productos SSS
+  const loadImagesForProductsFixed = async (products: ProductWithReaction[]) => {
     console.log(`🖼️ [Reactions] Cargando imágenes para ${products.length} productos...`);
     
     // Procesar productos con un pequeño delay para evitar sobrecarga
     for (let i = 0; i < products.length; i++) {
-      setTimeout(() => loadProductImage(products[i]), i * 100);
+      setTimeout(() => loadProductImageFixed(products[i]), i * 100);
     }
   };
 
-  // 🆕 FUNCIÓN PARA CARGAR IMAGEN DE UN PRODUCTO ESPECÍFICO
-  const loadProductImage = async (product: ProductWithReaction) => {
+  // 🔥 NUEVA FUNCIÓN: Cargar imagen priorizando image_url
+  const loadProductImageFixed = async (product: ProductWithReaction) => {
     try {
       // Marcar como cargando
       setProductReactions(prevProducts => 
@@ -259,6 +257,29 @@ export default function ReactionsScreen() {
       );
 
       console.log(`🔍 [Reactions] Buscando imagen para producto: ${product.code}`);
+      
+      // 🚀 PRIORIDAD 1: USAR IMAGE_URL SI EXISTE (productos SSS)
+      if (product.image_url && product.image_url.trim()) {
+        console.log(`🖼️ [Reactions] Usando image_url directa para ${product.code}: ${product.image_url}`);
+        
+        // Actualizar con la URL directa
+        setProductReactions(prevProducts => 
+          prevProducts.map(p => 
+            p.code === product.code ? { 
+              ...p, 
+              imageUri: product.image_url,
+              imageLoading: false, 
+              imageError: false 
+            } : p
+          )
+        );
+        
+        console.log(`✅ [Reactions] Imagen directa configurada para producto: ${product.code}`);
+        return;
+      }
+      
+      // 🔍 FALLBACK: Buscar en OpenFoodFacts solo si NO tiene image_url
+      console.log(`🌐 [Reactions] No tiene image_url, buscando en OpenFoodFacts para: ${product.code}`);
       
       // ⏱️ TIMEOUT DE 30 SEGUNDOS
       const timeoutPromise = new Promise<string | null>((_, reject) => {
@@ -283,7 +304,7 @@ export default function ReactionsScreen() {
       );
 
       if (imageUri) {
-        console.log(`✅ [Reactions] Imagen cargada para producto: ${product.code}`);
+        console.log(`✅ [Reactions] Imagen de OpenFoodFacts cargada para producto: ${product.code}`);
       } else {
         console.log(`❌ [Reactions] No se encontró imagen para producto: ${product.code}`);
       }
@@ -337,10 +358,10 @@ export default function ReactionsScreen() {
       if (isMounted.current) {
         setProductReactions(productsWithReactions);
         
-        // 🆕 CARGAR IMÁGENES DESPUÉS DE CONFIGURAR LOS PRODUCTOS
+        // 🔥 CARGAR IMÁGENES PRIORIZANDO IMAGE_URL
         if (productsWithReactions.length > 0) {
           console.log(`🚀 [Reactions] Iniciando carga de imágenes para ${productsWithReactions.length} productos`);
-          loadImagesForProducts(productsWithReactions);
+          loadImagesForProductsFixed(productsWithReactions);
         }
       }
       
@@ -513,7 +534,7 @@ export default function ReactionsScreen() {
     }
   };
 
-  // 🆕 COMPONENTE DE IMAGEN CON CACHE
+  // 🔥 COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL
   const ProductImageWithCache: React.FC<{ product: ProductWithReaction }> = ({ product }) => {
     if (product.imageLoading) {
       return (
@@ -732,7 +753,7 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                {/* 🔥 USAR COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL */}
                 <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
@@ -758,7 +779,7 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                {/* 🔥 USAR COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL */}
                 <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
@@ -784,7 +805,7 @@ export default function ReactionsScreen() {
                 style={styles.foodItem}
                 onPress={() => handleProductPress(product)}
               >
-                {/* 🆕 USAR COMPONENTE DE IMAGEN CON CACHE */}
+                {/* 🔥 USAR COMPONENTE DE IMAGEN CON PRIORIDAD PARA IMAGE_URL */}
                 <ProductImageWithCache product={product} />
                 <View style={styles.foodInfo}>
                   <Text style={styles.foodName}>{product.product_name}</Text>
