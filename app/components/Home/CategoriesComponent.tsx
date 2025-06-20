@@ -1,11 +1,16 @@
 // app/components/Home/CategoriesComponent.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { categoryStyles } from '../../styles/HomeComponentStyles';
 
+const { width } = Dimensions.get('window');
+
 export default function CategoriesComponent() {
   const router = useRouter();
+  
+  // Detectar si es tablet (iPad)
+  const isTablet = width >= 768;
   
   const categories = [
     { icon: '', text: 'Dairy', color: '#FFCC66', brand: 'Dairy' },
@@ -25,15 +30,27 @@ export default function CategoriesComponent() {
   return (
     <>
       <Text style={categoryStyles.sectionTitle}>Food Categories</Text>
-      <View style={categoryStyles.categoriesContainer}>
+      <View style={[
+        categoryStyles.categoriesContainer, 
+        isTablet && categoryStyles.categoriesContainerTablet
+      ]}>
         {categories.map((category) => (
           <TouchableOpacity
             key={category.text}
-            style={[categoryStyles.categoryItem, { backgroundColor: category.color }]}
+            style={[
+              categoryStyles.categoryItem, 
+              { backgroundColor: category.color },
+              isTablet && categoryStyles.categoryItemTablet
+            ]}
             onPress={() => handleCategoryPress(category.text, category.brand)}
           >
             <Text style={categoryStyles.categoryIcon}>{category.icon}</Text>
-            <Text style={categoryStyles.categoryText}>{category.text}</Text>
+            <Text style={[
+              categoryStyles.categoryText,
+              isTablet && categoryStyles.categoryTextTablet
+            ]}>
+              {category.text}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>

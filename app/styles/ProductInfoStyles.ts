@@ -94,10 +94,16 @@ export const styles = StyleSheet.create({
     marginBottom: 13,
 
   },
+  // 🎯 FIXED: Centered reactions container for iPad
   reactionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 20,
+    gap: 12, // Espacio consistente entre botones
+    flexWrap: 'wrap', // Para que se adapte en pantallas pequeñas
+    maxWidth: 500, // Limitar ancho máximo en pantallas grandes
+    alignSelf: 'center', // Centrar el contenedor completo
   },
   reactionButton: {
     flexDirection: 'row',
@@ -108,6 +114,8 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E5E5',
     backgroundColor: '#F5F5F5',
+    minWidth: 120, // Ancho mínimo consistente
+    justifyContent: 'center', // Centrar contenido del botón
   },
   selectedReactionButton: {
     borderColor: '#007AFF',

@@ -1,4 +1,4 @@
-// app/styles/HomeComponentStyles.ts - Estilos actualizados con botón Search
+// app/styles/HomeComponentStyles.ts - Estilos actualizados con soporte para iPad
 import { StyleSheet } from 'react-native';
 
 // Main HomeScreen Styles
@@ -238,7 +238,7 @@ export const searchStyles = StyleSheet.create({
   },
 });
 
-// Categories Component Styles - PADDING CORREGIDO
+// Categories Component Styles - ACTUALIZADOS CON SOPORTE PARA iPAD
 export const categoryStyles = StyleSheet.create({
   sectionTitle: {
     fontSize: 24,
@@ -252,6 +252,12 @@ export const categoryStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 80,
   },
+  // 🆕 NUEVO: Contenedor para tablets - una columna
+  categoriesContainerTablet: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+
+  },
   categoryItem: {
     width: '48%',
     height: 120,
@@ -260,6 +266,15 @@ export const categoryStyles = StyleSheet.create({
     marginBottom: 15,
     justifyContent: 'center',
     alignItems: 'flex-start',
+  },
+  // 🆕 NUEVO: Categoría para tablets - ancho completo
+  categoryItemTablet: {
+    width: '100%',
+    height: 80, // Altura menor para no ocupar demasiado espacio
+    flexDirection: 'row',
+
+    paddingHorizontal: 30,
+    marginBottom: 12,
   },
   categoryIcon: {
     fontSize: 24,
@@ -270,6 +285,12 @@ export const categoryStyles = StyleSheet.create({
     color: 'white',
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  // 🆕 NUEVO: Texto para tablets - sin margen bottom
+  categoryTextTablet: {
+    marginLeft: 20, // Espacio entre icono y texto en layout horizontal
+    marginBottom: 0, // Quitar margen bottom en layout horizontal
+    fontSize: 28, // Texto un poco más grande para tablets
   },
   loadingContainer: {
     padding: 20,
