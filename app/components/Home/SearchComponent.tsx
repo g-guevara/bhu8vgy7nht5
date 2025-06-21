@@ -1,5 +1,5 @@
-// app/components/Home/SearchComponent.tsx - FIXED: Corrected image_url property access
-import React, { useState, useEffect } from 'react';
+// app/components/Home/SearchComponent.tsx - FIXED: Race condition en carga de imágenes
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,7 @@ import {
   ProductImage,
   handleProductPress as handleProductPressUtil
 } from './productUtils';
+import { imageCacheUtils } from '../../utils/imageCacheUtils';
 
 // 🆕 IMPORTAR EL NUEVO SISTEMA DE PRODUCT DATA
 import { 
@@ -57,10 +58,30 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const MAX_HISTORY_ITEMS = 2;
   const HISTORY_KEY = 'product_history';
 
+  // 🔥 NUEVO: Referencias para cancelar operaciones pendientes
+  const imageTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set());
+  const currentSearchIdRef = useRef<string>('');
+
   useEffect(() => {
     loadHistoryFromStorage();
     loadCacheStats();
+    
+    // 🔥 NUEVO: Limpiar timeouts al desmontar componente
+    return () => {
+      clearAllImageTimeouts();
+    };
   }, []);
+
+  // 🔥 NUEVA FUNCIÓN: Limpiar todos los timeouts de imágenes
+  const clearAllImageTimeouts = () => {
+    imageTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    imageTimeoutsRef.current.clear();
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Generar ID único para cada búsqueda
+  const generateSearchId = (): string => {
+    return `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
 
   // 🆕 Cargar estadísticas del cache
   const loadCacheStats = async () => {
@@ -134,9 +155,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         setHistoryItems(historyProducts);
         
-        // 🔥 NUEVA FUNCIÓN: Cargar imágenes priorizando image_url
+        // 🔥 CARGAR IMÁGENES CON CANCELACIÓN
         if (historyProducts.length > 0) {
-          loadImagesForProductsFixed(historyProducts, setHistoryItems);
+          console.log(`🚀 [Search] Iniciando carga de imágenes para historial`);
+          const searchId = generateSearchId();
+          loadImagesForProductsWithCancellation(historyProducts, setHistoryItems, searchId);
         }
       } else {
         setHistoryItems([]);
@@ -149,25 +172,47 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // 🔥 FUNCIÓN CORREGIDA: Cargar imágenes priorizando image_url para productos SSS
-  const loadImagesForProductsFixed = async (
+  // 🔥 NUEVA FUNCIÓN: Cargar imágenes con sistema de cancelación
+  const loadImagesForProductsWithCancellation = async (
     products: ProductWithImageAndEmoji[], 
-    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>,
+    searchId: string
   ) => {
-    console.log(`🖼️ [Search] Cargando imágenes para ${products.length} productos...`);
+    console.log(`🖼️ [Search] Cargando imágenes para ${products.length} productos... (ID: ${searchId})`);
     
     // Procesar productos con un pequeño delay para evitar sobrecarga
     for (let i = 0; i < products.length; i++) {
-      setTimeout(() => loadProductImageFixed(products[i], setProducts), i * 100);
+      const timeout = setTimeout(() => {
+        // 🔥 VERIFICAR SI ESTA BÚSQUEDA SIGUE SIENDO VÁLIDA
+        if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+          console.log(`❌ [Search] Operación cancelada para ${products[i].code} (búsqueda obsoleta)`);
+          return;
+        }
+        
+        loadProductImageWithCancellation(products[i], setProducts, searchId);
+        
+        // Remover timeout de la lista una vez ejecutado
+        imageTimeoutsRef.current.delete(timeout);
+      }, i * 100);
+      
+      // Agregar timeout a la lista para poder cancelarlo
+      imageTimeoutsRef.current.add(timeout);
     }
   };
 
-  // 🔥 FUNCIÓN CORREGIDA: Cargar imagen priorizando image_url
-  const loadProductImageFixed = async (
+  // 🔥 NUEVA FUNCIÓN: Cargar imagen con verificación de cancelación
+  const loadProductImageWithCancellation = async (
     product: ProductWithImageAndEmoji,
-    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>,
+    searchId: string
   ) => {
     try {
+      // 🔥 VERIFICAR CANCELACIÓN ANTES DE EMPEZAR
+      if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+        console.log(`❌ [Search] Operación cancelada para ${product.code} antes de empezar`);
+        return;
+      }
+
       // Marcar como cargando
       setProducts(prevProducts => 
         prevProducts.map(p => 
@@ -178,12 +223,16 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       console.log(`🔍 [Search] Buscando imagen para producto: ${product.code}`);
       
       // 🚀 PRIORIDAD 1: USAR image_url SI EXISTE (productos SSS)
-      // FIXED: Acceder a image_url desde el producto base
       const productWithImageUrl = product as Product & ProductWithImageAndEmoji;
       if (productWithImageUrl.image_url && productWithImageUrl.image_url.trim()) {
-        console.log(`🖼️ [Search] Usando image_url directa para ${product.code}: ${productWithImageUrl.image_url}`);
+        // 🔥 VERIFICAR CANCELACIÓN ANTES DE ACTUALIZAR
+        if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+          console.log(`❌ [Search] Operación cancelada para ${product.code} en image_url`);
+          return;
+        }
+
+        console.log(`🖼️ [Search] Usando image_url directa para ${product.code}`);
         
-        // Actualizar con la URL directa
         setProducts(prevProducts => 
           prevProducts.map(p => 
             p.code === product.code ? { 
@@ -200,20 +249,72 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       }
       
       // 🔍 FALLBACK: Buscar en OpenFoodFacts solo si NO tiene image_url
-      console.log(`🌐 [Search] No tiene image_url, buscando en OpenFoodFacts para: ${product.code}`);
+      console.log(`🌐 [Search] Buscando en OpenFoodFacts para: ${product.code}`);
       
-      // Usar la función existente de productUtils.tsx
-      loadImagesForProducts([product], setProducts);
+      // 🔥 VERIFICAR CANCELACIÓN ANTES DE LLAMADA API
+      if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+        console.log(`❌ [Search] Operación cancelada para ${product.code} antes de API`);
+        return;
+      }
+
+      // Usar la función existente de productUtils.tsx con verificación
+      await loadImagesForProductsWithApiCall(product, setProducts, searchId);
       
     } catch (error) {
       console.error(`❌ [Search] Error cargando imagen para producto ${product.code}:`, error);
       
-      // Actualizar estado con error
+      // Solo actualizar si la búsqueda sigue siendo válida
+      if (currentSearchIdRef.current === searchId || searchId === 'history') {
+        setProducts(prevProducts => 
+          prevProducts.map(p => 
+            p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+          )
+        );
+      }
+    }
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Llamar API con verificación de cancelación
+  const loadImagesForProductsWithApiCall = async (
+    product: ProductWithImageAndEmoji,
+    setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>,
+    searchId: string
+  ) => {
+    // Implementar la lógica de la función original loadImagesForProducts pero con verificaciones
+    try {
+      // Verificar cancelación antes de la llamada costosa
+      if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+        console.log(`❌ [Search] API call cancelada para ${product.code}`);
+        return;
+      }
+
+      const imageUri = await imageCacheUtils.getProductImage(product.code);
+      
+      // Verificar cancelación antes de actualizar el estado
+      if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
+        console.log(`❌ [Search] Update cancelado para ${product.code}`);
+        return;
+      }
+      
       setProducts(prevProducts => 
         prevProducts.map(p => 
-          p.code === product.code ? { ...p, imageLoading: false, imageError: true } : p
+          p.code === product.code ? { 
+            ...p, 
+            imageUri, 
+            imageLoading: false, 
+            imageError: !imageUri 
+          } : p
         )
       );
+
+      if (imageUri) {
+        console.log(`✅ [Search] Imagen de OpenFoodFacts cargada para producto: ${product.code}`);
+      } else {
+        console.log(`❌ [Search] No se encontró imagen para producto: ${product.code}`);
+      }
+    } catch (error) {
+      console.error(`❌ [Search] Error en API call para ${product.code}:`, error);
+      throw error;
     }
   };
 
@@ -282,13 +383,11 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         // Agregar resultados de API al cache para próximas búsquedas
         if (newApiResults.length > 0) {
-          // FIXED: Mapear correctamente las propiedades
           const productsToCache = newApiResults.map(product => ({
             code: product.code,
             product_name: product.product_name,
             brands: product.brands,
             ingredients_text: product.ingredients_text,
-            // FIXED: Preservar image_url si existe en el resultado de API
             image_url: (product as any).image_url || undefined
           }));
           
@@ -309,37 +408,52 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     return results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   };
 
-  // 🔥 FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON hasSearched
+  // 🔥 FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON CANCELACIÓN
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
     if (!searchQuery) {
+      // 🔥 CANCELAR OPERACIONES PENDIENTES AL LIMPIAR
+      clearAllImageTimeouts();
+      currentSearchIdRef.current = '';
+      
       setSearchResults([]);
       setCurrentPage(1);
-      // 🔥 IMPORTANTE: Resetear hasSearched cuando se limpia la búsqueda
       setHasSearched(false);
       return;
     }
 
+    // 🔥 CANCELAR OPERACIONES PENDIENTES DE BÚSQUEDA ANTERIOR
+    clearAllImageTimeouts();
+    
+    // 🔥 GENERAR NUEVO ID DE BÚSQUEDA
+    const searchId = generateSearchId();
+    currentSearchIdRef.current = searchId;
+
     setSearchLoading(true);
     setCurrentPage(1);
-    // 🔥 IMPORTANTE: Marcar que se ha realizado una búsqueda
     setHasSearched(true);
     
     try {
-      console.log(`🔍 Starting hybrid search for: "${searchQuery}"`);
+      console.log(`🔍 Starting hybrid search for: "${searchQuery}" (ID: ${searchId})`);
       
       // Usar búsqueda híbrida
       const results = await performHybridSearch(searchQuery);
+      
+      // 🔥 VERIFICAR QUE ESTA BÚSQUEDA SIGUE SIENDO VÁLIDA
+      if (currentSearchIdRef.current !== searchId) {
+        console.log(`❌ Search cancelled: ${searchQuery} (búsqueda obsoleta)`);
+        return;
+      }
       
       setSearchResults(results);
       
       console.log(`✅ Hybrid search completed: ${results.length} total results`);
       
-      // 🔥 CARGAR IMÁGENES PRIORIZANDO IMAGE_URL
+      // 🔥 CARGAR IMÁGENES CON SISTEMA DE CANCELACIÓN
       if (results.length > 0) {
         const firstPageResults = results.slice(0, RESULTS_PER_PAGE);
-        loadImagesForProductsFixed(firstPageResults, setSearchResults);
+        loadImagesForProductsWithCancellation(firstPageResults, setSearchResults, searchId);
         console.log(`📸 Loading images for first ${firstPageResults.length} products`);
       }
       
@@ -354,9 +468,15 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
     } catch (error) {
       console.error('❌ Error in hybrid search:', error);
-      setSearchResults([]);
+      // Solo actualizar si esta búsqueda sigue siendo válida
+      if (currentSearchIdRef.current === searchId) {
+        setSearchResults([]);
+      }
     } finally {
-      setSearchLoading(false);
+      // Solo actualizar loading si esta búsqueda sigue siendo válida
+      if (currentSearchIdRef.current === searchId) {
+        setSearchLoading(false);
+      }
     }
   };
 
@@ -364,14 +484,12 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     // Agregar producto al sistema integrado si no existe
     const existingProduct = findProductInData(product.code);
     if (!existingProduct) {
-      // FIXED: Preservar image_url del producto original
       const productWithImageUrl = product as Product & ProductWithImageAndEmoji;
       addProductsToData([{
         code: product.code,
         product_name: product.product_name,
         brands: product.brands,
         ingredients_text: product.ingredients_text,
-        // FIXED: Usar image_url del producto original si existe
         image_url: productWithImageUrl.image_url || undefined
       }]);
     }
@@ -410,7 +528,8 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       if (productsNeedingImages.length > 0) {
         console.log(`📸 Page ${page}: Loading images for ${productsNeedingImages.length} new products`);
-        loadImagesForProductsFixed(productsNeedingImages, setSearchResults);
+        const searchId = currentSearchIdRef.current || generateSearchId();
+        loadImagesForProductsWithCancellation(productsNeedingImages, setSearchResults, searchId);
       }
     }
   };
@@ -467,8 +586,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           value={searchText}
           onChangeText={(text) => {
             setSearchText(text);
-            // 🔥 IMPORTANTE: Si se borra el texto, resetear hasSearched
+            // 🔥 CANCELAR OPERACIONES AL LIMPIAR TEXTO
             if (!text.trim()) {
+              clearAllImageTimeouts();
+              currentSearchIdRef.current = '';
               setHasSearched(false);
               setSearchResults([]);
             }
@@ -487,7 +608,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           returnKeyType="search"
         />
         
-        {/* 🔥 CAMBIO PRINCIPAL: Solo mostrar el botón cuando hay texto */}
         {searchText.trim() && (
           <TouchableOpacity
             style={[
@@ -505,17 +625,19 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           </TouchableOpacity>
         )}
         
-        {/* 🔥 CORRECCIÓN PRINCIPAL: Mostrar X cuando está enfocado O hay texto */}
         {(isInputFocused || searchText) && !searchLoading ? (
           <TouchableOpacity
             style={searchStyles.clearButton}
             onPress={() => {
+              // 🔥 CANCELAR TODO AL LIMPIAR
+              clearAllImageTimeouts();
+              currentSearchIdRef.current = '';
+              
               setSearchText('');
               setSearchResults([]);
               setCurrentPage(1);
-              // 🔥 IMPORTANTE: Resetear hasSearched al limpiar
               setHasSearched(false);
-              setIsInputFocused(false); // Para que el input pierda foco
+              setIsInputFocused(false);
               onFocusChange(false);
             }}
           >
@@ -612,7 +734,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
             </View>
           </>
         ) : hasSearched && searchText && searchResults.length === 0 ? (
-          // 🔥 CAMBIO CRÍTICO: Solo mostrar "no encontrado" si hasSearched es true
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>
