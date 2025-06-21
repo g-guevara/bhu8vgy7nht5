@@ -1,4 +1,5 @@
-// app/components/Home/SearchComponent.tsx - FIXED: Race condition en carga de imágenes
+// app/components/Home/SearchComponent.tsx - FIXED: Sistema de cache basado en queries exactas
+
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,16 @@ import {
 interface SearchComponentProps {
   onFocusChange: (focused: boolean) => void;
 }
+
+// 🔥 NUEVO: Cache de queries exactas (no de contenido de productos)
+interface QueryCacheEntry {
+  query: string;
+  results: ProductWithImageAndEmoji[];
+  timestamp: number;
+}
+
+const QUERY_CACHE_KEY = 'search_queries_cache';
+const QUERY_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutos
 
 export default function SearchComponent({ onFocusChange }: SearchComponentProps) {
   const router = useRouter();
@@ -62,15 +73,105 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   const imageTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set());
   const currentSearchIdRef = useRef<string>('');
 
+  // 🔥 NUEVO: Cache de queries en memoria
+  const [queryCache, setQueryCache] = useState<Map<string, QueryCacheEntry>>(new Map());
+
   useEffect(() => {
     loadHistoryFromStorage();
     loadCacheStats();
+    loadQueryCache();
     
     // 🔥 NUEVO: Limpiar timeouts al desmontar componente
     return () => {
       clearAllImageTimeouts();
     };
   }, []);
+
+  // 🔥 NUEVA FUNCIÓN: Cargar cache de queries desde AsyncStorage
+  const loadQueryCache = async () => {
+    try {
+      const cacheJson = await AsyncStorage.getItem(QUERY_CACHE_KEY);
+      if (cacheJson) {
+        const cacheArray: QueryCacheEntry[] = JSON.parse(cacheJson);
+        const now = Date.now();
+        
+        // Filtrar entradas expiradas
+        const validEntries = cacheArray.filter(entry => 
+          (now - entry.timestamp) < QUERY_CACHE_EXPIRY
+        );
+        
+        // Convertir a Map
+        const cacheMap = new Map<string, QueryCacheEntry>();
+        validEntries.forEach(entry => {
+          cacheMap.set(entry.query.toLowerCase(), entry);
+        });
+        
+        setQueryCache(cacheMap);
+        console.log(`📦 Loaded ${validEntries.length} cached queries`);
+      }
+    } catch (error) {
+      console.error('Error loading query cache:', error);
+    }
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Guardar cache de queries
+  const saveQueryCache = async (newCache: Map<string, QueryCacheEntry>) => {
+    try {
+      const cacheArray = Array.from(newCache.values());
+      await AsyncStorage.setItem(QUERY_CACHE_KEY, JSON.stringify(cacheArray));
+      console.log(`💾 Saved ${cacheArray.length} queries to cache`);
+    } catch (error) {
+      console.error('Error saving query cache:', error);
+    }
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Buscar en cache de queries exactas
+  const getFromQueryCache = (query: string): ProductWithImageAndEmoji[] | null => {
+    const normalizedQuery = query.toLowerCase().trim();
+    const cached = queryCache.get(normalizedQuery);
+    
+    if (cached) {
+      const now = Date.now();
+      if ((now - cached.timestamp) < QUERY_CACHE_EXPIRY) {
+        console.log(`💾 Cache HIT for query: "${query}"`);
+        return cached.results;
+      } else {
+        // Remover entrada expirada
+        const newCache = new Map(queryCache);
+        newCache.delete(normalizedQuery);
+        setQueryCache(newCache);
+        saveQueryCache(newCache);
+        console.log(`🕐 Cache EXPIRED for query: "${query}"`);
+      }
+    }
+    
+    console.log(`❌ Cache MISS for query: "${query}"`);
+    return null;
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Guardar en cache de queries
+  const saveToQueryCache = (query: string, results: ProductWithImageAndEmoji[]) => {
+    const normalizedQuery = query.toLowerCase().trim();
+    const entry: QueryCacheEntry = {
+      query: normalizedQuery,
+      results: results,
+      timestamp: Date.now()
+    };
+    
+    const newCache = new Map(queryCache);
+    newCache.set(normalizedQuery, entry);
+    
+    // Mantener solo las últimas 50 búsquedas
+    if (newCache.size > 50) {
+      const oldest = Array.from(newCache.entries())
+        .sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
+      newCache.delete(oldest[0]);
+    }
+    
+    setQueryCache(newCache);
+    saveQueryCache(newCache);
+    console.log(`💾 Cached results for query: "${query}"`);
+  };
 
   // 🔥 NUEVA FUNCIÓN: Limpiar todos los timeouts de imágenes
   const clearAllImageTimeouts = () => {
@@ -108,7 +209,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         
         for (const historyItem of historyData.slice(0, MAX_HISTORY_ITEMS)) {
           try {
-            // 🆕 PRIMERO: Buscar en productData.ts integrado
+            // 🆕 PRIMERO: Buscar en productData.ts integrado POR CÓDIGO (no por texto)
             const cachedProduct = findProductInData(historyItem.code);
             
             if (cachedProduct) {
@@ -158,8 +259,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
         // 🔥 CARGAR IMÁGENES CON CANCELACIÓN
         if (historyProducts.length > 0) {
           console.log(`🚀 [Search] Iniciando carga de imágenes para historial`);
-          const searchId = generateSearchId();
-          loadImagesForProductsWithCancellation(historyProducts, setHistoryItems, searchId);
+          loadImagesForProductsWithCancellation(historyProducts, setHistoryItems, 'history');
         }
       } else {
         setHistoryItems([]);
@@ -280,7 +380,6 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     setProducts: React.Dispatch<React.SetStateAction<ProductWithImageAndEmoji[]>>,
     searchId: string
   ) => {
-    // Implementar la lógica de la función original loadImagesForProducts pero con verificaciones
     try {
       // Verificar cancelación antes de la llamada costosa
       if (currentSearchIdRef.current !== searchId && searchId !== 'history') {
@@ -349,66 +448,53 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     }
   };
 
-  // 🆕 FUNCIÓN DE BÚSQUEDA HÍBRIDA (cache local + API)
-  const performHybridSearch = async (searchQuery: string): Promise<ProductWithImageAndEmoji[]> => {
-    const results: ProductWithImageAndEmoji[] = [];
+  // 🔥 FUNCIÓN DE BÚSQUEDA CORREGIDA: Query-based cache + API
+  const performQueryBasedSearch = async (searchQuery: string): Promise<ProductWithImageAndEmoji[]> => {
+    console.log(`🔍 [QuerySearch] Starting search for: "${searchQuery}"`);
     
-    // 1. Buscar primero en datos locales/cache
-    const localResults = searchProductsInData(searchQuery, 20);
-    console.log(`🔍 Found ${localResults.length} local results for "${searchQuery}"`);
-    
-    // Convertir resultados locales al formato esperado
-    localResults.forEach(product => {
-      results.push({
-        ...product,
-        relevanceScore: 1500, // Mayor prioridad para resultados locales
-        imageUri: null,
-        imageLoading: false,
-        imageError: false
-      });
-    });
-    
-    // 2. Si hay pocos resultados locales, buscar en API
-    if (results.length < 10) {
-      try {
-        console.log(`🌐 Searching API for additional results for "${searchQuery}"`);
-        const apiResults = await searchInSpecificCollection(searchQuery);
-        
-        // Filtrar resultados que ya tenemos localmente
-        const newApiResults = apiResults.filter(apiProduct => 
-          !results.some(localProduct => localProduct.code === apiProduct.code)
-        );
-        
-        console.log(`🌐 Found ${newApiResults.length} new API results`);
-        
-        // Agregar resultados de API al cache para próximas búsquedas
-        if (newApiResults.length > 0) {
-          const productsToCache = newApiResults.map(product => ({
-            code: product.code,
-            product_name: product.product_name,
-            brands: product.brands,
-            ingredients_text: product.ingredients_text,
-            image_url: (product as any).image_url || undefined
-          }));
-          
-          addProductsToData(productsToCache);
-          console.log(`💾 Added ${productsToCache.length} new products to integrated data`);
-          
-          // Actualizar estadísticas
-          loadCacheStats();
-        }
-        
-        results.push(...newApiResults);
-      } catch (error) {
-        console.error('❌ Error in API search:', error);
-      }
+    // 1. PRIMERO: Verificar cache de queries exactas
+    const cachedResults = getFromQueryCache(searchQuery);
+    if (cachedResults) {
+      console.log(`💾 [QuerySearch] Using cached results for: "${searchQuery}"`);
+      return cachedResults;
     }
     
-    // 3. Ordenar por relevancia
-    return results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    // 2. SEGUNDO: Cache MISS - Buscar en API
+    console.log(`🌐 [QuerySearch] Cache miss, searching API for: "${searchQuery}"`);
+    
+    try {
+      const apiResults = await searchInSpecificCollection(searchQuery);
+      console.log(`🌐 [QuerySearch] Found ${apiResults.length} API results`);
+      
+      // 3. TERCERO: Cachear los productos individuales (para acceso por código)
+      if (apiResults.length > 0) {
+        const productsToCache = apiResults.map(product => ({
+          code: product.code,
+          product_name: product.product_name,
+          brands: product.brands,
+          ingredients_text: product.ingredients_text,
+          image_url: (product as any).image_url || undefined
+        }));
+        
+        addProductsToData(productsToCache);
+        console.log(`💾 [QuerySearch] Added ${productsToCache.length} products to individual cache`);
+        
+        // Actualizar estadísticas
+        loadCacheStats();
+      }
+      
+      // 4. CUARTO: Cachear esta query específica
+      saveToQueryCache(searchQuery, apiResults);
+      
+      return apiResults;
+      
+    } catch (error) {
+      console.error('❌ [QuerySearch] Error in API search:', error);
+      return [];
+    }
   };
 
-  // 🔥 FUNCIÓN PRINCIPAL DE BÚSQUEDA - ACTUALIZADA CON CANCELACIÓN
+  // 🔥 FUNCIÓN PRINCIPAL DE BÚSQUEDA - CORREGIDA
   const handleSearch = async () => {
     const searchQuery = searchText.trim();
     
@@ -435,10 +521,10 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
     setHasSearched(true);
     
     try {
-      console.log(`🔍 Starting hybrid search for: "${searchQuery}" (ID: ${searchId})`);
+      console.log(`🔍 Starting query-based search for: "${searchQuery}" (ID: ${searchId})`);
       
-      // Usar búsqueda híbrida
-      const results = await performHybridSearch(searchQuery);
+      // Usar búsqueda basada en queries exactas
+      const results = await performQueryBasedSearch(searchQuery);
       
       // 🔥 VERIFICAR QUE ESTA BÚSQUEDA SIGUE SIENDO VÁLIDA
       if (currentSearchIdRef.current !== searchId) {
@@ -448,7 +534,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       setSearchResults(results);
       
-      console.log(`✅ Hybrid search completed: ${results.length} total results`);
+      console.log(`✅ Query-based search completed: ${results.length} total results`);
       
       // 🔥 CARGAR IMÁGENES CON SISTEMA DE CANCELACIÓN
       if (results.length > 0) {
@@ -459,15 +545,16 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       
       // Mostrar top 3 para debugging
       if (__DEV__ && results.length > 0) {
-        console.log('🏆 Top 3 results:');
+        console.log('🏆 Top 3 final results:');
+        const wasCached = getFromQueryCache(searchQuery) !== null;
         results.slice(0, 3).forEach((r: ProductWithImageAndEmoji, i: number) => {
-          const source = r.relevanceScore >= 1500 ? 'Local' : 'API';
-          console.log(`${i+1}. "${r.product_name}" (${r.brands}) - Score: ${r.relevanceScore} [${source}]`);
+          const source = wasCached ? 'Cache' : 'API';
+          console.log(`${i+1}. "${r.product_name}" (${r.brands}) [${source}]`);
         });
       }
       
     } catch (error) {
-      console.error('❌ Error in hybrid search:', error);
+      console.error('❌ Error in query-based search:', error);
       // Solo actualizar si esta búsqueda sigue siendo válida
       if (currentSearchIdRef.current === searchId) {
         setSearchResults([]);
@@ -481,7 +568,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
   };
 
   const handleProductPress = async (product: ProductWithImageAndEmoji) => {
-    // Agregar producto al sistema integrado si no existe
+    // Agregar producto al sistema integrado si no existe (para acceso por código)
     const existingProduct = findProductInData(product.code);
     if (!existingProduct) {
       const productWithImageUrl = product as Product & ProductWithImageAndEmoji;
@@ -563,9 +650,9 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
       <View style={searchStyles.productInfo}>
         <Text style={searchStyles.productName} numberOfLines={1} ellipsizeMode="tail">
           {product.product_name}
-          {__DEV__ && (
+          {__DEV__ && queryCache.has(searchText.toLowerCase()) && (
             <Text style={{ color: '#999', fontSize: 12 }}>
-              {' '}({product.relevanceScore >= 1500 ? 'Local' : 'API'}: {product.relevanceScore})
+              {' '}(Cached)
             </Text>
           )}
         </Text>
@@ -737,7 +824,7 @@ export default function SearchComponent({ onFocusChange }: SearchComponentProps)
           <View style={searchStyles.noResultsContainer}>
             <Text style={searchStyles.noResultsText}>No products found for "{searchText}"</Text>
             <Text style={searchStyles.noResultsSubtext}>
-              Searched locally and in: {getCollectionInfo(searchText)}
+              Searched in: {getCollectionInfo(searchText)}
             </Text>
           </View>
         ) : loadingHistory ? (
